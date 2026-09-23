@@ -1,0 +1,143 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'DM Sans', 'Poppins', system-ui, -apple-system, sans-serif;
+  --font-poppins: 'Poppins', sans-serif;
+  --font-dmsans: 'DM Sans', sans-serif;
+}
+
+@layer base {
+  :root {
+    --brand-navy: #0b132b;
+    --brand-dark-blue: #1c2541;
+    --brand-blue: #1e3a8a;
+    --brand-electric: #2563eb;
+  }
+
+  html,
+  body {
+    font-family: 'DM Sans', 'Poppins', system-ui, -apple-system, sans-serif;
+    background-color: #f8fafc;
+    color: #1e293b;
+    overflow-x: hidden;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  .font-heading {
+    font-family: 'Poppins', 'DM Sans', system-ui, -apple-system, sans-serif;
+  }
+
+
+  button,
+  [role="button"] {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [role="button"][aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+}
+
+/* Glassmorphism utility classes */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.glass-dark {
+  background: rgba(11, 19, 43, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.hero-gradient {
+  background: linear-gradient(135deg, #0b132b 0%, #1c2541 40%, #1e3a8a 80%, #1d4ed8 100%);
+}
+
+.accent-glow {
+  box-shadow: 0 0 25px rgba(37, 99, 235, 0.35);
+}
+
+.badge-glow {
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.4);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+/* Keyframe animations for drawers & modals */
+@keyframes slideLeft {
+  from {
+    transform: translateX(100%);
+  }
+
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-slideLeft {
+  animation: slideLeft 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.2s ease-out forwards;
+}
+
+/* Print styles for E-Ticket & Invoices */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .printable-eticket,
+  .printable-eticket * {
+    visibility: visible;
+  }
+
+  .printable-eticket {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+}
