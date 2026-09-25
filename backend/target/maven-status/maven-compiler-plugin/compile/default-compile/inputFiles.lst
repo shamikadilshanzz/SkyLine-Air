@@ -12,10 +12,14 @@ D:\SLIIT\Year 2\Y2 S1\SE\Project\SkyLineVi\backend\src\main\java\com\skylineair\
 D:\SLIIT\Year 2\Y2 S1\SE\Project\SkyLineVi\backend\src\main\java\com\skylineair\model\Reservation.java
 D:\SLIIT\Year 2\Y2 S1\SE\Project\SkyLineVi\backend\src\main\java\com\skylineair\repository\UserCardRepository.java
 D:\SLIIT\Year 2\Y2 S1\SE\Project\SkyLineVi\backend\src\main\java\com\skylineair\model\Hotel.java
+D:\SLIIT\Year 2\Y2 S1\SE\Project\SkyLineVi\backend\src\main\java\com\skylineair\model\PriceAlert.java
 D:\SLIIT\Year 2\Y2 S1\SE\Project\SkyLineVi\backend\src\main\java\com\skylineair\repository\AirportRepository.java
 D:\SLIIT\Year 2\Y2 S1\SE\Project\SkyLineVi\backend\src\main\java\com\skylineair\repository\UserRepository.java
 D:\SLIIT\Year 2\Y2 S1\SE\Project\SkyLineVi\backend\src\main\java\com\skylineair\controller\UserCardController.java
 D:\SLIIT\Year 2\Y2 S1\SE\Project\SkyLineVi\backend\src\main\java\com\skylineair\model\Payment.java
+D:\SLIIT\Year 2\Y2 S1\SE\Project\SkyLineVi\backend\src\main\java\com\skylineair\controller\PriceAlertController.java
+D:\SLIIT\Year 2\Y2 S1\SE\Project\SkyLineVi\backend\src\main\java\com\skylineair\repository\PriceAlertRepository.java
+D:\SLIIT\Year 2\Y2 S1\SE\Project\SkyLineVi\backend\src\main\java\com\skylineair\service\EmailService.java
 D:\SLIIT\Year 2\Y2 S1\SE\Project\SkyLineVi\backend\src\main\java\com\skylineair\model\User.java
 D:\SLIIT\Year 2\Y2 S1\SE\Project\SkyLineVi\backend\src\main\java\com\skylineair\controller\AircraftController.java
 D:\SLIIT\Year 2\Y2 S1\SE\Project\SkyLineVi\backend\src\main\java\com\skylineair\repository\HotelBookingRepository.java
@@ -32,3 +36,4 @@ D:\SLIIT\Year 2\Y2 S1\SE\Project\SkyLineVi\backend\src\main\java\com\skylineair\
 D:\SLIIT\Year 2\Y2 S1\SE\Project\SkyLineVi\backend\src\main\java\com\skylineair\model\Aircraft.java
 D:\SLIIT\Year 2\Y2 S1\SE\Project\SkyLineVi\backend\src\main\java\com\skylineair\controller\PaymentController.java
 D:\SLIIT\Year 2\Y2 S1\SE\Project\SkyLineVi\backend\src\main\java\com\skylineair\model\HotelBooking.java
+D:\SLIIT\Year 2\Y2 S1\SE\Project\SkyLineVi\backend\src\main\java\com\skylineair\service\OtpService.java

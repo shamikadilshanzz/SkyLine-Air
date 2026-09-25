@@ -133,7 +133,7 @@ export const buildFlightSegments = (flight, airportsList = INITIAL_AIRPORTS) => 
           city: flight.layoverCity || layoverInfo.city,
           airportName: layoverInfo.fullName.split(' (')[0],
           description: layoverHours >= 8
-            ? 'Eligible for Complimentary Hotel Accommodation (UC-06). Get ready to experience luxury lounges and transit suites.'
+            ? 'Eligible for Complimentary Hotel Accommodation. Get ready to experience luxury lounges and transit suites.'
             : 'More than just an airport. Get ready to experience the best in shopping, dining and lounges.'
         }
       },

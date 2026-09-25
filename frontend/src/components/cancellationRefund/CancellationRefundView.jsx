@@ -53,7 +53,7 @@ function Money({ value, className = '' }) {
 /*  Main component                                                     */
 /* ------------------------------------------------------------------ */
 
-export default function CancellationRefundView({ currentRole }) {
+export default function CancellationRefundView({ currentRole, user, onOpenAuth, onNavigateToBookings }) {
   const isOfficer = currentRole === 'TICKETING_OFFICER' || currentRole === 'ADMIN';
   const [activeTab, setActiveTab] = useState(() => (isOfficer ? 'officer' : 'lookup')); // 'officer', 'tracker', 'lookup'
 
@@ -64,13 +64,13 @@ export default function CancellationRefundView({ currentRole }) {
     }
   }, [currentRole, isOfficer]);
 
-  const [reservations, setReservations] = useState(INITIAL_RESERVATIONS || []);
+  const [reservations, setReservations] = useState([]);
   const [searchPnr, setSearchPnr] = useState('');
   const [searchError, setSearchError] = useState('');
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [cancellationReason, setCancellationReason] = useState('Schedule Conflict');
 
-  const [refundList, setRefundList] = useState(INITIAL_REFUNDS);
+  const [refundList, setRefundList] = useState([]);
   const [cancellationConfirmed, setCancellationConfirmed] = useState(false);
   const [newRefundRef, setNewRefundRef] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -91,60 +91,126 @@ export default function CancellationRefundView({ currentRole }) {
   React.useEffect(() => {
     async function loadSqlRefundData() {
       try {
-        const { fetchReservationsApi, fetchRefundsApi } = await import('../../api/apiService');
-        const apiRes = await fetchReservationsApi();
-        if (apiRes && apiRes.length > 0) {
-          const formattedRes = apiRes.map((r) => ({
-            pnr: r.pnrCode || r.pnr,
-            userName: r.userName || 'Alex Morgan',
-            userEmail: r.userEmail || 'alex.morgan@skyline.com',
-            flightNumber: r.flightNumber || 'SL-204',
-            origin: r.origin || 'CMB',
-            destination: r.destination || 'LHR',
-            cabinClass: r.cabinClass || 'ECONOMY',
-            totalAmount: r.totalAmount || 780,
-            status: r.bookingStatus || 'CONFIRMED'
-          }));
-          setReservations(formattedRes);
-          if (formattedRes[0]) setSelectedBooking(formattedRes[0]);
-        } else {
-          setReservations([]);
-          setSelectedBooking(null);
+        const {
+          fetchReservationsApi,
+          fetchUserReservationsApi,
+          fetchRefundsApi,
+          fetchRefundsByUserEmailApi
+        } = await import('../../api/apiService');
+
+        let formattedRes = [];
+        let formattedRefunds = [];
+
+        if (isOfficer) {
+          // Officers see all reservations and refunds across the airline
+          const apiRes = await fetchReservationsApi();
+          if (apiRes && apiRes.length > 0) {
+            formattedRes = apiRes.map((r) => ({
+              pnr: r.pnrCode || r.pnr,
+              userId: r.userId,
+              userName: r.userName || 'Passenger',
+              userEmail: r.userEmail || '',
+              flightNumber: r.flightNumber || 'SL-204',
+              origin: r.origin || 'CMB',
+              destination: r.destination || 'LHR',
+              cabinClass: r.cabinClass || 'ECONOMY',
+              totalAmount: r.totalAmount || 780,
+              status: r.bookingStatus || 'CONFIRMED'
+            }));
+          }
+
+          const apiRefunds = await fetchRefundsApi();
+          if (apiRefunds && apiRefunds.length > 0) {
+            formattedRefunds = apiRefunds.map((rf) => ({
+              refundId: rf.refundReference || `RF-${rf.refundId}`,
+              rawId: rf.refundId,
+              pnr: rf.pnr || '',
+              userName: rf.userName || '',
+              userEmail: rf.userEmail || '',
+              flightNumber: rf.flightNumber || '',
+              originalFare: rf.originalFare || 0,
+              cancellationFee: rf.cancellationFee || 0,
+              refundAmount: rf.refundAmount || 0,
+              reason: rf.reason || 'Personal schedule change',
+              status: rf.status || 'APPROVED',
+              timeline: [
+                { stage: 'Requested', time: 'Completed', done: true },
+                { stage: 'Under Review', time: 'Completed', done: true },
+                { stage: 'Approved by Airline', time: rf.status === 'APPROVED' ? 'Approved' : 'Pending', done: rf.status === 'APPROVED' },
+                { stage: 'Sent to PSP Gateway', time: 'In progress', done: rf.status === 'APPROVED' },
+                { stage: 'Refund Credited', time: 'Pending', done: false }
+              ]
+            }));
+          }
+        } else if (user) {
+          // Regular Passenger: Load ONLY bookings and refunds that belong strictly to this user
+          const rawUserId = user?.rawId || (user?.id ? parseInt(String(user.id).replace(/\D/g, ''), 10) : null);
+          const apiRes = await fetchUserReservationsApi(rawUserId, user.email);
+
+          if (apiRes && apiRes.length > 0) {
+            const userOnlyRes = apiRes.filter((r) => {
+              const matchesId = rawUserId && Number(r.userId) === Number(rawUserId);
+              const matchesEmail =
+                user?.email &&
+                r.userEmail &&
+                String(r.userEmail).trim().toLowerCase() === String(user.email).trim().toLowerCase();
+              return matchesId || matchesEmail;
+            });
+
+            formattedRes = userOnlyRes.map((r) => ({
+              pnr: r.pnrCode || r.pnr,
+              userId: r.userId,
+              userName: r.userName || user.name,
+              userEmail: r.userEmail || user.email,
+              flightNumber: r.flightNumber || 'SL-204',
+              origin: r.origin || 'CMB',
+              destination: r.destination || 'LHR',
+              cabinClass: r.cabinClass || 'ECONOMY',
+              totalAmount: r.totalAmount || 780,
+              status: r.bookingStatus || 'CONFIRMED'
+            }));
+          }
+
+          // Fetch only this logged-in user's refunds
+          if (user.email) {
+            const userRefunds = await fetchRefundsByUserEmailApi(user.email);
+            if (userRefunds && userRefunds.length > 0) {
+              formattedRefunds = userRefunds.map((rf) => ({
+                refundId: rf.refundReference || `RF-${rf.refundId}`,
+                rawId: rf.refundId,
+                pnr: rf.pnr || '',
+                userName: rf.userName || user.name,
+                userEmail: rf.userEmail || user.email,
+                flightNumber: rf.flightNumber || '',
+                originalFare: rf.originalFare || 0,
+                cancellationFee: rf.cancellationFee || 0,
+                refundAmount: rf.refundAmount || 0,
+                reason: rf.reason || 'Personal schedule change',
+                status: rf.status || 'UNDER_REVIEW',
+                timeline: [
+                  { stage: 'Requested', time: 'Completed', done: true },
+                  { stage: 'Under Review', time: 'In progress', done: true },
+                  { stage: 'Approved by Airline', time: rf.status === 'APPROVED' ? 'Approved' : 'Pending', done: rf.status === 'APPROVED' },
+                  { stage: 'Sent to PSP Gateway', time: rf.status === 'APPROVED' ? 'In progress' : 'Pending', done: rf.status === 'APPROVED' },
+                  { stage: 'Refund Credited', time: 'Pending', done: false }
+                ]
+              }));
+            }
+          }
         }
 
-        const apiRefunds = await fetchRefundsApi();
-        if (apiRefunds && apiRefunds.length > 0) {
-          const formattedRefunds = apiRefunds.map((rf) => ({
-            refundId: rf.refundReference || `RF-${rf.refundId}`,
-            rawId: rf.refundId,
-            pnr: rf.pnr || 'SK-784920',
-            userName: rf.userName || 'Alex Morgan',
-            userEmail: rf.userEmail || 'alex.morgan@skyline.com',
-            flightNumber: rf.flightNumber || 'SL-204',
-            originalFare: rf.originalFare || 480,
-            cancellationFee: rf.cancellationFee || 80,
-            refundAmount: rf.refundAmount || 400,
-            reason: rf.reason || 'Personal schedule change',
-            status: rf.status || 'APPROVED',
-            timeline: [
-              { stage: 'Requested', time: 'Completed', done: true },
-              { stage: 'Under Review', time: 'Completed', done: true },
-              { stage: 'Approved by Airline', time: rf.status === 'APPROVED' ? 'Approved' : 'Pending', done: rf.status === 'APPROVED' },
-              { stage: 'Sent to PSP Gateway', time: 'In progress', done: rf.status === 'APPROVED' },
-              { stage: 'Refund Credited', time: 'Pending', done: false }
-            ]
-          }));
-          setRefundList(formattedRefunds);
-        } else {
-          setRefundList([]);
-        }
+        setReservations(formattedRes);
+        setSelectedBooking(formattedRes[0] || null);
+        setRefundList(formattedRefunds);
       } catch (err) {
         console.warn('[CancellationRefundView] SQL fetch notice:', err.message);
+        setReservations([]);
+        setSelectedBooking(null);
         setRefundList([]);
       }
     }
     loadSqlRefundData();
-  }, []);
+  }, [user, isOfficer]);
 
   // Cancellation Fee Logic
   const calculateRefund = (booking) => {
@@ -399,6 +465,29 @@ export default function CancellationRefundView({ currentRole }) {
         </div>
       </div>
 
+      {/* Guest Notice */}
+      {!user && !isOfficer && (
+        <div className="rounded-2xl border border-blue-200 bg-blue-50/80 p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0">
+              <UserCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-sm font-extrabold text-blue-950">Signed out / Guest Mode</h4>
+              <p className="text-xs text-blue-800/80">Sign in to view your bookings and track your refund claims.</p>
+            </div>
+          </div>
+          {onOpenAuth && (
+            <button
+              onClick={onOpenAuth}
+              className="shrink-0 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-md hover:bg-blue-700 transition"
+            >
+              Sign In / Register
+            </button>
+          )}
+        </div>
+      )}
+
       {/* ============ TAB 1: PNR LOOKUP & CANCELLATION (Passenger Only) ============ */}
       {activeTab === 'lookup' && !isOfficer && (
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
@@ -601,7 +690,7 @@ export default function CancellationRefundView({ currentRole }) {
                             <AlertTriangle className="h-4 w-4" />
                           </span>
                           <div className="text-xs">
-                            <div className="font-bold text-amber-900">Airline cancellation policy (UC-04)</div>
+                            <div className="font-bold text-amber-900">Airline cancellation policy</div>
                             <p className="mt-0.5 leading-relaxed text-amber-800/90">
                               Cancellations made 24+ hours before departure incur a flat administrative fee. The
                               remaining balance is refunded to your original payment method.
@@ -875,7 +964,7 @@ export default function CancellationRefundView({ currentRole }) {
               </span>
               <div>
                 <h3 className="text-lg font-extrabold text-slate-900">Ticketing Officer Refund Matrix</h3>
-                <p className="text-xs text-slate-500">Review, approve, or reject passenger refund claims (UC-04 Officer Portal)</p>
+                <p className="text-xs text-slate-500">Review, approve, or reject passenger refund claims (Officer Portal)</p>
               </div>
             </div>
 

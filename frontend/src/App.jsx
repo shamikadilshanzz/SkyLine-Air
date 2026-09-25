@@ -361,6 +361,7 @@ export default function App() {
           <FlightResultsView
             flights={flights}
             searchCriteria={searchCriteria}
+            user={user}
             onSelectFlight={handleSelectFlight}
             onModifySearch={() => setActiveTab('search')}
           />
@@ -421,7 +422,12 @@ export default function App() {
         )}
 
         {activeTab === 'refunds' && (
-          <CancellationRefundView currentRole={currentRole} />
+          <CancellationRefundView
+            currentRole={currentRole}
+            user={user}
+            onOpenAuth={() => setShowAuthModal(true)}
+            onNavigateToBookings={() => setActiveTab('bookings')}
+          />
         )}
 
         {activeTab === 'reservation-mgmt' && (

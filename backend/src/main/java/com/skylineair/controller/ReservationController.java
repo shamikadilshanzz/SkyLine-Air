@@ -73,8 +73,33 @@ public class ReservationController {
     }
 
     @GetMapping("/user/{userId}")
-    public List<Reservation> getReservationsByUser(@PathVariable Long userId) {
+    public List<Reservation> getReservationsByUser(@PathVariable Long userId,
+                                                   @RequestParam(required = false) String email) {
         List<Reservation> list = reservationRepository.findByUserId(userId);
+        if (email != null && !email.trim().isEmpty()) {
+            List<Reservation> emailList = reservationRepository.findByUserEmail(email.trim());
+            for (Reservation er : emailList) {
+                if (list.stream().noneMatch(r -> r.getReservationId() != null && r.getReservationId().equals(er.getReservationId()))) {
+                    list.add(er);
+                }
+            }
+        }
+        for (Reservation r : list) {
+            if ("SK-176984".equalsIgnoreCase(r.getPnrCode())) {
+                r.setCabinClass("BUSINESS");
+            }
+            if (r.getCabinClass() != null && r.getPassengers() != null) {
+                for (com.skylineair.model.Passenger p : r.getPassengers()) {
+                    p.setCabinClass(r.getCabinClass());
+                }
+            }
+        }
+        return list;
+    }
+
+    @GetMapping("/email/{email}")
+    public List<Reservation> getReservationsByEmail(@PathVariable String email) {
+        List<Reservation> list = reservationRepository.findByUserEmail(email);
         for (Reservation r : list) {
             if ("SK-176984".equalsIgnoreCase(r.getPnrCode())) {
                 r.setCabinClass("BUSINESS");

@@ -20,10 +20,14 @@ import {
   LayoutGrid,
   List as ListIcon,
   Users,
-  Gauge
+  Gauge,
+  Armchair,
+  Sparkles
 } from 'lucide-react';
 import { INITIAL_FLIGHTS, INITIAL_AIRPORTS, INITIAL_AIRCRAFT, PLANE_PHOTO_PRESETS } from '../../data/mockData';
 import AirportManagementView from './AirportManagementView';
+import AircraftManagementView from './AircraftManagementView';
+import { fetchAircraftApi } from '../../api/apiService';
 
 /* ---------- shared style tokens (same as the other pages) ---------- */
 const CARD = 'rounded-[1.75rem] border border-slate-200/80 bg-white shadow-[0_8px_30px_rgb(15,30,92,0.06)]';
@@ -82,6 +86,43 @@ const fmtDay = (v) => {
   const d = new Date(v);
   if (isNaN(d)) return '';
   return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
+};
+
+const getAircraftTotalSeats = (aircraft) => {
+  if (!aircraft) return 60;
+  const eco = Number(aircraft.economySeats) || 0;
+  const bus = Number(aircraft.businessSeats) || 0;
+  const first = Number(aircraft.firstClassSeats ?? aircraft.firstSeats) || 0;
+  const total = eco + bus + first;
+  return total > 0 ? total : 60;
+};
+
+/**
+ * Automatically calculate duration string (e.g. '4h 30m') from departure and arrival times.
+ * Handles datetime-local format as well as time-only inputs.
+ */
+export const calculateFlightDuration = (departureStr, arrivalStr) => {
+  if (!departureStr || !arrivalStr) return '';
+  let dep = new Date(departureStr);
+  let arr = new Date(arrivalStr);
+
+  if (isNaN(dep.getTime()) && typeof departureStr === 'string' && departureStr.includes(':')) {
+    dep = new Date(`1970-01-01T${departureStr.trim().padStart(5, '0')}:00`);
+  }
+  if (isNaN(arr.getTime()) && typeof arrivalStr === 'string' && arrivalStr.includes(':')) {
+    arr = new Date(`1970-01-01T${arrivalStr.trim().padStart(5, '0')}:00`);
+  }
+
+  if (isNaN(dep.getTime()) || isNaN(arr.getTime())) return '';
+
+  const diffMs = arr.getTime() - dep.getTime();
+  if (diffMs <= 0) return '';
+
+  const totalMinutes = Math.round(diffMs / (1000 * 60));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  return `${hours}h ${String(minutes).padStart(2, '0')}m`;
 };
 
 /* ====================== small presentational pieces ====================== */
@@ -261,7 +302,8 @@ function SeatLoad({ available, total }) {
 export default function ScheduleManagementView({ flights: propsFlights, onScheduleUpdated, airports: propsAirports, onAirportsUpdated }) {
   const [flights, setFlights] = useState(propsFlights || INITIAL_FLIGHTS);
   const [airports, setAirports] = useState(propsAirports || INITIAL_AIRPORTS);
-  const [adminSubTab, setAdminSubTab] = useState('flights'); // 'flights' | 'airports'
+  const [aircraftList, setAircraftList] = useState(INITIAL_AIRCRAFT);
+  const [adminSubTab, setAdminSubTab] = useState('flights'); // 'flights' | 'aircraft' | 'airports'
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingFlight, setEditingFlight] = useState(null);
@@ -270,6 +312,28 @@ export default function ScheduleManagementView({ flights: propsFlights, onSchedu
   const [loading, setLoading] = useState(false);
   const [viewMode, setViewMode] = useState('cards'); // 'cards' | 'table'
   const conflictRef = useRef(null);
+
+  // Load aircraft list from backend SQL DB
+  const refreshAircraftFromSql = async () => {
+    try {
+      const data = await fetchAircraftApi();
+      if (Array.isArray(data) && data.length > 0) {
+        setAircraftList(data.map((a, idx) => ({
+          id: a.aircraftId || a.id || idx + 1,
+          aircraftId: a.aircraftId || a.id || idx + 1,
+          model: a.model,
+          tailNumber: a.tailNumber,
+          economySeats: Number(a.economySeats) || 0,
+          businessSeats: Number(a.businessSeats) || 0,
+          firstClassSeats: Number(a.firstClassSeats ?? a.firstSeats) || 0,
+          firstSeats: Number(a.firstClassSeats ?? a.firstSeats) || 0,
+          status: a.status || 'ACTIVE'
+        })));
+      }
+    } catch (err) {
+      console.warn('[ScheduleManagementView] Aircraft fetch notice:', err.message);
+    }
+  };
 
   // Fetch all flights from backend SQL DB on mount
   const refreshFlightsFromSql = async () => {
@@ -317,6 +381,7 @@ export default function ScheduleManagementView({ flights: propsFlights, onSchedu
 
   useEffect(() => {
     refreshFlightsFromSql();
+    refreshAircraftFromSql();
   }, []);
 
   useEffect(() => {
@@ -356,6 +421,9 @@ export default function ScheduleManagementView({ flights: propsFlights, onSchedu
   };
 
   // Form State for Adding New Flight (All 24 Database Attributes)
+  const defaultAircraft = aircraftList[0] || INITIAL_AIRCRAFT[0];
+  const initialSeats = getAircraftTotalSeats(defaultAircraft);
+
   const defaultNewFlightState = {
     flightNumber: 'SL-602',
     origin: 'CMB',
@@ -365,14 +433,14 @@ export default function ScheduleManagementView({ flights: propsFlights, onSchedu
     departureTime: '2026-09-15T12:00',
     arrivalTime: '2026-09-15T22:30',
     duration: '10h 30m',
-    aircraftId: 1,
-    aircraft: 'Boeing 787-9 Dreamliner',
-    tailNumber: '4R-SLA',
+    aircraftId: defaultAircraft?.aircraftId || defaultAircraft?.id || 1,
+    aircraft: defaultAircraft?.model || 'Boeing 787-9 Dreamliner',
+    tailNumber: defaultAircraft?.tailNumber || '4R-SLA',
     priceEconomy: 850,
     priceBusiness: 1950,
     priceFirst: 3600,
-    totalSeats: 60,
-    availableSeats: 48,
+    totalSeats: initialSeats,
+    availableSeats: initialSeats,
     status: 'ON_TIME',
     stops: 1,
     hasLayover: true,
@@ -383,8 +451,83 @@ export default function ScheduleManagementView({ flights: propsFlights, onSchedu
   };
 
   const [newFlight, setNewFlight] = useState(defaultNewFlightState);
-  const patchNew = (patch) => setNewFlight((prev) => ({ ...prev, ...patch }));
-  const patchEdit = (patch) => setEditingFlight((prev) => ({ ...prev, ...patch }));
+  
+  // Auto-calculates flight duration whenever departureTime or arrivalTime is modified
+  const patchNew = (patch) => setNewFlight((prev) => {
+    const next = { ...prev, ...patch };
+    if ('departureTime' in patch || 'arrivalTime' in patch) {
+      const autoDur = calculateFlightDuration(next.departureTime, next.arrivalTime);
+      if (autoDur) {
+        next.duration = autoDur;
+      }
+    }
+    return next;
+  });
+
+  // Auto-calculates flight duration whenever departureTime or arrivalTime is modified in edit modal
+  const patchEdit = (patch) => setEditingFlight((prev) => {
+    if (!prev) return prev;
+    const next = { ...prev, ...patch };
+    if ('departureTime' in patch || 'arrivalTime' in patch) {
+      const autoDur = calculateFlightDuration(next.departureTime, next.arrivalTime);
+      if (autoDur) {
+        next.duration = autoDur;
+      }
+    }
+    return next;
+  });
+
+  // Handler for selecting aircraft in Add Flight form: automatically populates model, tailNumber, and totalSeats from DB
+  const handleSelectAircraftForNewFlight = (tailNumberOrModel) => {
+    const found =
+      aircraftList.find((a) => a.tailNumber === tailNumberOrModel) ||
+      aircraftList.find((a) => a.model === tailNumberOrModel);
+    if (found) {
+      const seats = getAircraftTotalSeats(found);
+      patchNew({
+        tailNumber: found.tailNumber,
+        aircraft: found.model,
+        aircraftId: found.aircraftId || found.id || 1,
+        totalSeats: seats,
+        availableSeats: seats
+      });
+    }
+  };
+
+  // Handler for opening Add Flight modal with refreshed aircraft defaults
+  const handleOpenAddFlightModal = () => {
+    const ac = aircraftList[0] || INITIAL_AIRCRAFT[0];
+    const seats = getAircraftTotalSeats(ac);
+    const dep = '2026-09-15T12:00';
+    const arr = '2026-09-15T22:30';
+    setNewFlight({
+      flightNumber: `SL-${Math.floor(600 + Math.random() * 300)}`,
+      origin: airports[0]?.code || 'CMB',
+      originCity: airports[0]?.city || 'Colombo',
+      destination: airports[1]?.code || 'JFK',
+      destinationCity: airports[1]?.city || 'New York',
+      departureTime: dep,
+      arrivalTime: arr,
+      duration: calculateFlightDuration(dep, arr) || '10h 30m',
+      aircraftId: ac?.aircraftId || ac?.id || 1,
+      aircraft: ac?.model || 'Boeing 787-9 Dreamliner',
+      tailNumber: ac?.tailNumber || '4R-SLA',
+      priceEconomy: 850,
+      priceBusiness: 1950,
+      priceFirst: 3600,
+      totalSeats: seats,
+      availableSeats: seats,
+      status: 'ON_TIME',
+      stops: 1,
+      hasLayover: true,
+      layoverAirport: 'DXB',
+      layoverCity: 'Dubai',
+      layoverDurationHours: 8.0,
+      image: PLANE_PHOTO_PRESETS[0].url
+    });
+    setConflictWarning('');
+    setShowAddModal(true);
+  };
 
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [layoverFilter, setLayoverFilter] = useState('ALL');
@@ -442,6 +585,8 @@ export default function ScheduleManagementView({ flights: propsFlights, onSchedu
     const destAirport = airports.find(a => a.code === newFlight.destination);
     const layoverAirportObj = airports.find(a => a.code === newFlight.layoverAirport);
 
+    const calculatedDuration = calculateFlightDuration(newFlight.departureTime, newFlight.arrivalTime);
+
     const payload = {
       flightNumber: newFlight.flightNumber.toUpperCase(),
       originCode: newFlight.origin,
@@ -450,7 +595,7 @@ export default function ScheduleManagementView({ flights: propsFlights, onSchedu
       destinationCity: destAirport?.city || newFlight.destinationCity || newFlight.destination,
       departureTime: newFlight.departureTime.includes('T') ? newFlight.departureTime : `${newFlight.departureTime}T12:00:00`,
       arrivalTime: newFlight.arrivalTime.includes('T') ? newFlight.arrivalTime : `${newFlight.arrivalTime}T18:00:00`,
-      duration: newFlight.duration || '6h 00m',
+      duration: newFlight.duration || calculatedDuration || '6h 00m',
       stops: Number(newFlight.stops) || 0,
       hasLayover: Boolean(newFlight.hasLayover || newFlight.stops > 0),
       layoverAirport: newFlight.layoverAirport || '',
@@ -496,6 +641,8 @@ export default function ScheduleManagementView({ flights: propsFlights, onSchedu
       return;
     }
 
+    const calculatedDuration = calculateFlightDuration(editingFlight.departureTime, editingFlight.arrivalTime);
+
     const payload = {
       flightNumber: editingFlight.flightNumber,
       originCode: editingFlight.origin,
@@ -504,7 +651,7 @@ export default function ScheduleManagementView({ flights: propsFlights, onSchedu
       destinationCity: editingFlight.destinationCity,
       departureTime: editingFlight.departureTime,
       arrivalTime: editingFlight.arrivalTime,
-      duration: editingFlight.duration,
+      duration: editingFlight.duration || calculatedDuration || '6h 00m',
       stops: Number(editingFlight.stops) || 0,
       hasLayover: Boolean(editingFlight.hasLayover || editingFlight.stops > 0),
       layoverAirport: editingFlight.layoverAirport || '',
@@ -625,7 +772,7 @@ export default function ScheduleManagementView({ flights: propsFlights, onSchedu
       `}</style>
 
       {/* ================= Sub-navigation ================= */}
-      <div role="tablist" className="grid w-full grid-cols-2 gap-1 rounded-2xl bg-slate-100 p-1 text-xs font-bold sm:inline-grid sm:w-auto">
+      <div role="tablist" className="grid w-full grid-cols-3 gap-1 rounded-2xl bg-slate-100 p-1 text-xs font-bold sm:inline-grid sm:w-auto">
         <button
           role="tab"
           aria-selected={adminSubTab === 'flights'}
@@ -637,8 +784,24 @@ export default function ScheduleManagementView({ flights: propsFlights, onSchedu
         >
           <Plane className="h-4 w-4 shrink-0" />
           <span className="truncate">
-            <span className="hidden sm:inline">Flight schedule and fleet</span>
+            <span className="hidden sm:inline">Flight schedules</span>
             <span className="sm:hidden">Flights</span> ({flights.length})
+          </span>
+        </button>
+
+        <button
+          role="tab"
+          aria-selected={adminSubTab === 'aircraft'}
+          onClick={() => setAdminSubTab('aircraft')}
+          className={`flex items-center justify-center gap-2 rounded-xl px-3 py-3 transition-all sm:px-5 ${adminSubTab === 'aircraft'
+              ? 'bg-gradient-to-b from-blue-500 to-blue-600 text-white shadow-md shadow-blue-600/25'
+              : 'text-slate-600 hover:text-slate-900'
+            }`}
+        >
+          <Gauge className="h-4 w-4 shrink-0" />
+          <span className="truncate">
+            <span className="hidden sm:inline">Aircraft fleet</span>
+            <span className="sm:hidden">Fleet</span> ({aircraftList.length})
           </span>
         </button>
 
@@ -661,6 +824,11 @@ export default function ScheduleManagementView({ flights: propsFlights, onSchedu
 
       {adminSubTab === 'airports' ? (
         <AirportManagementView airports={airports} onAirportsUpdated={handleAirportsUpdate} />
+      ) : adminSubTab === 'aircraft' ? (
+        <AircraftManagementView
+          aircraft={aircraftList}
+          onAircraftUpdated={(updatedList) => setAircraftList(updatedList)}
+        />
       ) : (
         <>
           {/* ================= Hero ================= */}
@@ -689,7 +857,7 @@ export default function ScheduleManagementView({ flights: propsFlights, onSchedu
               </div>
 
               <button
-                onClick={() => setShowAddModal(true)}
+                onClick={handleOpenAddFlightModal}
                 className="flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-6 py-4 text-sm font-extrabold text-[#0a1230] shadow-xl shadow-black/20 transition hover:bg-blue-50 active:scale-[0.98] md:w-auto"
               >
                 <Plus className="h-4 w-4 text-blue-600" />
@@ -842,7 +1010,7 @@ export default function ScheduleManagementView({ flights: propsFlights, onSchedu
                   Reset all filters
                 </button>
               ) : (
-                <button onClick={() => setShowAddModal(true)} className={`mt-1 rounded-xl px-5 py-2.5 text-sm font-bold ${PRIMARY_BTN}`}>
+                <button onClick={handleOpenAddFlightModal} className={`mt-1 rounded-xl px-5 py-2.5 text-sm font-bold ${PRIMARY_BTN}`}>
                   Add new flight route
                 </button>
               )}
@@ -1106,7 +1274,7 @@ export default function ScheduleManagementView({ flights: propsFlights, onSchedu
       {/* ================= Add flight ================= */}
       {showAddModal && (
         <Sheet
-          eyebrow="UC-01 and UC-05 scheduler"
+          eyebrow= "scheduler"
           title="Add and schedule a new flight route"
           icon={Plus}
           onClose={() => setShowAddModal(false)}
@@ -1120,29 +1288,36 @@ export default function ScheduleManagementView({ flights: propsFlights, onSchedu
                 </div>
               )}
 
-              <FormSection icon={Plane} title="1. Flight and fleet details">
+              <FormSection icon={Plane} title="1. Flight and fleet details" aside="Selecting an aircraft auto-calculates total seat capacity">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <Field label="Flight number *">
                     <input type="text" value={newFlight.flightNumber} onChange={(e) => patchNew({ flightNumber: e.target.value })} className={INPUT} placeholder="e.g. SL-602" required />
                   </Field>
-                  <Field label="Aircraft model">
-                    <input type="text" value={newFlight.aircraft} onChange={(e) => patchNew({ aircraft: e.target.value })} className={INPUT} placeholder="e.g. Boeing 787-9" required />
-                  </Field>
-                  <Field label="Aircraft tail number">
+                  <Field label="Aircraft model *">
                     <select
                       value={newFlight.tailNumber}
-                      onChange={(e) => {
-                        const found = INITIAL_AIRCRAFT.find(a => a.tailNumber === e.target.value);
-                        patchNew({
-                          tailNumber: e.target.value,
-                          aircraft: found?.model || newFlight.aircraft,
-                          aircraftId: found?.id || 1
-                        });
-                      }}
+                      onChange={(e) => handleSelectAircraftForNewFlight(e.target.value)}
                       className={INPUT}
+                      required
                     >
-                      {INITIAL_AIRCRAFT.map(a => (
-                        <option key={a.tailNumber} value={a.tailNumber}>{a.tailNumber} - {a.model}</option>
+                      {aircraftList.map((a) => (
+                        <option key={a.tailNumber || a.aircraftId || a.id} value={a.tailNumber}>
+                          {a.model} ({getAircraftTotalSeats(a)} seats)
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Aircraft tail number *">
+                    <select
+                      value={newFlight.tailNumber}
+                      onChange={(e) => handleSelectAircraftForNewFlight(e.target.value)}
+                      className={INPUT}
+                      required
+                    >
+                      {aircraftList.map((a) => (
+                        <option key={a.tailNumber || a.aircraftId || a.id} value={a.tailNumber}>
+                          {a.tailNumber} - {a.model}
+                        </option>
                       ))}
                     </select>
                   </Field>
@@ -1185,18 +1360,53 @@ export default function ScheduleManagementView({ flights: propsFlights, onSchedu
               <FormSection icon={Clock} title="3. Schedule timings and duration">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <Field label="Departure time *">
-                    <input type="datetime-local" value={newFlight.departureTime} onChange={(e) => patchNew({ departureTime: e.target.value })} className={INPUT} required />
+                    <input
+                      type="datetime-local"
+                      value={newFlight.departureTime}
+                      onChange={(e) => patchNew({ departureTime: e.target.value })}
+                      className={INPUT}
+                      required
+                    />
                   </Field>
                   <Field label="Arrival time *">
-                    <input type="datetime-local" value={newFlight.arrivalTime} onChange={(e) => patchNew({ arrivalTime: e.target.value })} className={INPUT} required />
+                    <input
+                      type="datetime-local"
+                      value={newFlight.arrivalTime}
+                      onChange={(e) => patchNew({ arrivalTime: e.target.value })}
+                      className={INPUT}
+                      required
+                    />
                   </Field>
                   <Field label="Flight duration">
-                    <input type="text" value={newFlight.duration} onChange={(e) => patchNew({ duration: e.target.value })} placeholder="e.g. 10h 30m" className={INPUT} />
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={newFlight.duration}
+                        onChange={(e) => patchNew({ duration: e.target.value })}
+                        placeholder="e.g. 4h 30m"
+                        className={`${INPUT} pr-14`}
+                      />
+                      {newFlight.duration && (
+                        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-blue-600 border border-blue-200/60 shadow-xs">
+                          Auto
+                        </span>
+                      )}
+                    </div>
                   </Field>
                 </div>
               </FormSection>
 
-              <FormSection icon={DollarSign} title="4. Seats and cabin class fares" aside="Turning a class off hides its price on passenger search">
+              <FormSection icon={DollarSign} title="4. Seats and cabin class fares" aside={`Auto-synced: ${newFlight.totalSeats} seats from DB`}>
+                <div className="mb-2 flex items-center justify-between rounded-xl bg-blue-50/80 px-3.5 py-2 text-xs font-bold text-blue-900 border border-blue-200/80">
+                  <span className="flex items-center gap-1.5">
+                    <Armchair className="h-4 w-4 text-blue-600" />
+                    Database Aircraft Seat Count: {newFlight.aircraft} ({newFlight.tailNumber})
+                  </span>
+                  <span className="rounded-md bg-blue-600 text-white px-2 py-0.5 text-[11px] font-extrabold shadow-sm">
+                    {newFlight.totalSeats} Total Seats
+                  </span>
+                </div>
+
                 <div className="grid grid-cols-1 gap-3 border-b border-slate-200/70 pb-3 sm:grid-cols-2">
                   <Field label="Total aircraft seats *">
                     <input type="number" inputMode="numeric" value={newFlight.totalSeats} onChange={(e) => patchNew({ totalSeats: Number(e.target.value) })} className={INPUT} min={6} required />
@@ -1290,7 +1500,7 @@ export default function ScheduleManagementView({ flights: propsFlights, onSchedu
         >
           <form onSubmit={handleEditFlightSubmit} className="flex min-h-0 flex-1 flex-col">
             <div className="flex-1 space-y-4 overflow-y-auto p-5 sm:p-6">
-              <FormSection icon={Plane} title="Flight identifier and status">
+              <FormSection icon={Plane} title="Flight identifier and status" aside="Changing aircraft auto-syncs seat capacity">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <Field label="Flight number">
                     <input type="text" value={editingFlight.flightNumber} onChange={(e) => patchEdit({ flightNumber: e.target.value })} className={INPUT} required />
@@ -1300,8 +1510,32 @@ export default function ScheduleManagementView({ flights: propsFlights, onSchedu
                       {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                   </Field>
-                  <Field label="Aircraft model">
-                    <input type="text" value={editingFlight.aircraft} onChange={(e) => patchEdit({ aircraft: e.target.value })} className={INPUT} />
+                  <Field label="Aircraft (Fleet model & tail number)">
+                    <select
+                      value={editingFlight.tailNumber || editingFlight.aircraft}
+                      onChange={(e) => {
+                        const found =
+                          aircraftList.find((a) => a.tailNumber === e.target.value) ||
+                          aircraftList.find((a) => a.model === e.target.value);
+                        if (found) {
+                          const seats = getAircraftTotalSeats(found);
+                          patchEdit({
+                            aircraft: found.model,
+                            tailNumber: found.tailNumber,
+                            aircraftId: found.aircraftId || found.id || 1,
+                            totalSeats: seats,
+                            availableSeats: Math.min(editingFlight.availableSeats || seats, seats)
+                          });
+                        }
+                      }}
+                      className={INPUT}
+                    >
+                      {aircraftList.map((a) => (
+                        <option key={a.tailNumber || a.aircraftId || a.id} value={a.tailNumber}>
+                          {a.model} ({a.tailNumber}) - {getAircraftTotalSeats(a)} seats
+                        </option>
+                      ))}
+                    </select>
                   </Field>
                 </div>
               </FormSection>
@@ -1309,18 +1543,51 @@ export default function ScheduleManagementView({ flights: propsFlights, onSchedu
               <FormSection icon={Clock} title="Timings and duration">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <Field label="Departure time">
-                    <input type="datetime-local" value={editingFlight.departureTime} onChange={(e) => patchEdit({ departureTime: e.target.value })} className={INPUT} />
+                    <input
+                      type="datetime-local"
+                      value={editingFlight.departureTime}
+                      onChange={(e) => patchEdit({ departureTime: e.target.value })}
+                      className={INPUT}
+                    />
                   </Field>
                   <Field label="Arrival time">
-                    <input type="datetime-local" value={editingFlight.arrivalTime} onChange={(e) => patchEdit({ arrivalTime: e.target.value })} className={INPUT} />
+                    <input
+                      type="datetime-local"
+                      value={editingFlight.arrivalTime}
+                      onChange={(e) => patchEdit({ arrivalTime: e.target.value })}
+                      className={INPUT}
+                    />
                   </Field>
                   <Field label="Duration">
-                    <input type="text" value={editingFlight.duration} onChange={(e) => patchEdit({ duration: e.target.value })} className={INPUT} />
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={editingFlight.duration}
+                        onChange={(e) => patchEdit({ duration: e.target.value })}
+                        placeholder="e.g. 4h 30m"
+                        className={`${INPUT} pr-14`}
+                      />
+                      {editingFlight.duration && (
+                        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-blue-600 border border-blue-200/60 shadow-xs">
+                          Auto
+                        </span>
+                      )}
+                    </div>
                   </Field>
                 </div>
               </FormSection>
 
-              <FormSection icon={DollarSign} title="Seats and cabin class pricing" aside="Turn a class off to hide its price on passenger search">
+              <FormSection icon={DollarSign} title="Seats and cabin class pricing" aside={`Auto-synced: ${editingFlight.totalSeats} seats from DB`}>
+                <div className="mb-2 flex items-center justify-between rounded-xl bg-blue-50/80 px-3.5 py-2 text-xs font-bold text-blue-900 border border-blue-200/80">
+                  <span className="flex items-center gap-1.5">
+                    <Armchair className="h-4 w-4 text-blue-600" />
+                    Fleet Model Capacity: {editingFlight.aircraft} ({editingFlight.tailNumber || 'N/A'})
+                  </span>
+                  <span className="rounded-md bg-blue-600 text-white px-2 py-0.5 text-[11px] font-extrabold shadow-sm">
+                    {editingFlight.totalSeats} Total Seats
+                  </span>
+                </div>
+
                 <div className="grid grid-cols-1 gap-3 border-b border-slate-200/70 pb-3 sm:grid-cols-2">
                   <Field label="Total aircraft seats">
                     <input type="number" inputMode="numeric" value={editingFlight.totalSeats} onChange={(e) => patchEdit({ totalSeats: Number(e.target.value) })} className={INPUT} />

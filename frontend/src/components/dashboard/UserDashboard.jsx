@@ -31,12 +31,19 @@ export default function UserDashboard({ user, onSelectBooking, onNavigateToProfi
         const { fetchUserReservationsApi, fetchHotelBookingsApi, fetchHotelBookingsByUserApi, isOwnHotelBooking } = await import('../../api/apiService');
         const rawUserId = user?.rawId || (user?.id ? parseInt(String(user.id).replace(/\D/g, '')) : null);
         let apiData = [];
-        if (rawUserId) {
-          apiData = await fetchUserReservationsApi(rawUserId);
+        if (rawUserId || user?.email) {
+          apiData = await fetchUserReservationsApi(rawUserId, user?.email);
         }
 
-        if (apiData && apiData.length > 0) {
-          const formatted = apiData.map(r => {
+        // Strictly filter to ensure only this user's bookings are displayed
+        const ownReservations = (apiData || []).filter(r => {
+          const matchesId = rawUserId && Number(r.userId) === Number(rawUserId);
+          const matchesEmail = user?.email && r.userEmail && String(r.userEmail).trim().toLowerCase() === String(user.email).trim().toLowerCase();
+          return matchesId || matchesEmail;
+        });
+
+        if (ownReservations && ownReservations.length > 0) {
+          const formatted = ownReservations.map(r => {
             const rawCabin = r.cabinClass || (r.passengers && r.passengers[0]?.cabinClass);
             let resolvedCabin = 'ECONOMY';
             if (r.pnrCode === 'SK-176984') {
@@ -58,8 +65,8 @@ export default function UserDashboard({ user, onSelectBooking, onNavigateToProfi
             return {
               pnr: r.pnrCode || r.pnr,
               userId: r.userId ? `USR-${r.userId}` : r.userId,
-              userName: r.userName || user?.name || 'Alex Morgan',
-              userEmail: r.userEmail || user?.email || 'alex.morgan@skyline.com',
+              userName: r.userName || user?.name || 'Passenger',
+              userEmail: r.userEmail || user?.email || '',
               flightId: r.flightId ? `FL-${r.flightId}` : r.flightId,
               flightNumber: r.flightNumber || 'SL-204',
               origin: r.origin || 'CMB',
@@ -78,8 +85,8 @@ export default function UserDashboard({ user, onSelectBooking, onNavigateToProfi
               // Strictly propagate resolvedCabin to ALL passengers so card and passengers are 100% in sync
               passengers: r.passengers && r.passengers.length > 0 ? r.passengers.map(p => ({
                 title: p.title || 'Mr',
-                firstName: p.firstName || 'Alex',
-                lastName: p.lastName || 'Morgan',
+                firstName: p.firstName || (user?.firstName || 'Passenger'),
+                lastName: p.lastName || (user?.lastName || ''),
                 dob: p.dob || '1992-05-14',
                 passport: p.passportNumber || p.passport || 'N9849201',
                 seat: p.seatNumber || p.seat || '14A',
@@ -87,7 +94,7 @@ export default function UserDashboard({ user, onSelectBooking, onNavigateToProfi
                 extraBaggageKg: p.extraBaggageKg || 0,
                 meal: p.mealPreference || p.meal || 'Standard'
               })) : [
-                { title: 'Mr', firstName: 'Alex', lastName: 'Morgan', dob: '1992-05-14', passport: 'N9849201', seat: '14A', cabinClass: resolvedCabin, extraBaggageKg: 5, meal: 'Vegetarian' }
+                { title: 'Mr', firstName: user?.firstName || 'Passenger', lastName: user?.lastName || '', dob: '1992-05-14', passport: 'N9849201', seat: '14A', cabinClass: resolvedCabin, extraBaggageKg: 0, meal: 'Standard' }
               ]
             };
           });

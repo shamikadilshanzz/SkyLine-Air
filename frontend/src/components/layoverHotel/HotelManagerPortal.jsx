@@ -161,7 +161,7 @@ function fieldClass(hasError) {
     }`;
 }
 
-export default function HotelManagerPortal({ hotels = [], onHotelsUpdated }) {
+export default function HotelManagerPortal({ hotels = [], onHotelsUpdated, onBookingsUpdated }) {
   const [activeSubTab, setActiveSubTab] = useState('hotels'); // 'hotels' | 'bookings'
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
@@ -228,6 +228,7 @@ export default function HotelManagerPortal({ hotels = [], onHotelsUpdated }) {
         )
       );
       showNotification('success', `Booking #${bookingId} status updated to ${status}.`);
+      onBookingsUpdated && onBookingsUpdated();
     } catch (err) {
       showNotification('error', err.message || 'Could not update status.');
     }
@@ -239,6 +240,7 @@ export default function HotelManagerPortal({ hotels = [], onHotelsUpdated }) {
       await deleteHotelBookingApi(bookingId);
       setBookings((prev) => prev.filter((b) => b.hotelBookingId !== bookingId && b.id !== bookingId));
       showNotification('success', `Booking #${bookingId} deleted.`);
+      onBookingsUpdated && onBookingsUpdated();
     } catch (err) {
       showNotification('error', err.message || 'Could not delete booking.');
     }

@@ -19,6 +19,7 @@ public class DataInitializer implements CommandLineRunner {
     private final RefundRequestRepository refundRequestRepository;
     private final UserCardRepository userCardRepository;
     private final ReservationRepository reservationRepository;
+    private final PriceAlertRepository priceAlertRepository;
 
     public DataInitializer(AirportRepository airportRepository,
                            AircraftRepository aircraftRepository,
@@ -27,7 +28,8 @@ public class DataInitializer implements CommandLineRunner {
                            HotelRepository hotelRepository,
                            RefundRequestRepository refundRequestRepository,
                            UserCardRepository userCardRepository,
-                           ReservationRepository reservationRepository) {
+                           ReservationRepository reservationRepository,
+                           PriceAlertRepository priceAlertRepository) {
         this.airportRepository = airportRepository;
         this.aircraftRepository = aircraftRepository;
         this.flightRepository = flightRepository;
@@ -36,10 +38,17 @@ public class DataInitializer implements CommandLineRunner {
         this.refundRequestRepository = refundRequestRepository;
         this.userCardRepository = userCardRepository;
         this.reservationRepository = reservationRepository;
+        this.priceAlertRepository = priceAlertRepository;
     }
 
     @Override
     public void run(String... args) {
+        // Seed Price Alerts
+        if (priceAlertRepository.count() == 0) {
+            priceAlertRepository.save(new PriceAlert(null, 1L, "alex@skyline.com", "CMB", "Colombo", "SIN", "Singapore", new BigDecimal("320.00"), "ECONOMY", "INSTANT", "ACTIVE", LocalDateTime.now()));
+            priceAlertRepository.save(new PriceAlert(null, 1L, "alex@skyline.com", "CMB", "Colombo", "JFK", "New York", new BigDecimal("750.00"), "ECONOMY", "DAILY", "ACTIVE", LocalDateTime.now()));
+        }
+
         // Seed Airports
         if (airportRepository.count() == 0) {
             airportRepository.save(new Airport("CMB", "Bandaranaike International Airport", "Colombo", "Sri Lanka"));

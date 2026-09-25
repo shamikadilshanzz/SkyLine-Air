@@ -211,3 +211,19 @@ CREATE TABLE IF NOT EXISTS hotel_bookings (
     booking_status VARCHAR(30) DEFAULT 'CONFIRMED',
     created_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 12. Flight Price Alerts & Saved Searches Table (12 attributes)
+CREATE TABLE IF NOT EXISTS price_alerts (
+    alert_id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT,
+    user_email VARCHAR(100) NOT NULL,
+    origin_code VARCHAR(3) NOT NULL,
+    origin_city VARCHAR(50),
+    destination_code VARCHAR(3) NOT NULL,
+    destination_city VARCHAR(50),
+    target_price DECIMAL(10, 2) NOT NULL,
+    cabin_class VARCHAR(20) DEFAULT 'ECONOMY',
+    frequency VARCHAR(20) DEFAULT 'INSTANT',
+    status VARCHAR(20) DEFAULT 'ACTIVE',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

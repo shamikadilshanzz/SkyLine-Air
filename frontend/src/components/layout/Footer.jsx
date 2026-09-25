@@ -257,7 +257,7 @@ export default function Footer({ setActiveTab, onInfoClick }) {
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400 ring-1 ring-inset ring-blue-400/20">
                     <MapPin className="h-4 w-4" />
                   </span>
-                  <span className="pt-1.5 leading-snug text-slate-300">SLIIT Technology Campus, Malabe, Sri Lanka</span>
+                  <span className="pt-1.5 leading-snug text-slate-300">101, Galle Road, Colombo, Sri Lanka</span>
                 </li>
               </ul>
             </div>

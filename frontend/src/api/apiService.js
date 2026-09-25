@@ -167,6 +167,60 @@ export async function fetchAircraftApi() {
   return await fetchApi('/aircraft');
 }
 
+export async function createAircraftApi(aircraftData) {
+  return await fetchApi('/aircraft', {
+    method: 'POST',
+    body: JSON.stringify(aircraftData),
+  });
+}
+
+export async function updateAircraftApi(id, aircraftData) {
+  return await fetchApi(`/aircraft/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(aircraftData),
+  });
+}
+
+export async function deleteAircraftApi(id) {
+  return await fetchApi(`/aircraft/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+// ----------------------------------------------------
+// PRICE ALERTS & SAVED SEARCHES (SEARCH FLIGHT CRUD)
+// ----------------------------------------------------
+
+export async function fetchPriceAlertsApi(emailOrUserId) {
+  if (typeof emailOrUserId === 'number') {
+    return await fetchApi(`/price-alerts/user/${emailOrUserId}`);
+  }
+  if (typeof emailOrUserId === 'string' && emailOrUserId.includes('@')) {
+    return await fetchApi(`/price-alerts/email/${encodeURIComponent(emailOrUserId)}`);
+  }
+  return await fetchApi('/price-alerts');
+}
+
+export async function createPriceAlertApi(alertData) {
+  return await fetchApi('/price-alerts', {
+    method: 'POST',
+    body: JSON.stringify(alertData),
+  });
+}
+
+export async function updatePriceAlertApi(id, alertData) {
+  return await fetchApi(`/price-alerts/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(alertData),
+  });
+}
+
+export async function deletePriceAlertApi(id) {
+  return await fetchApi(`/price-alerts/${id}`, {
+    method: 'DELETE',
+  });
+}
+
 // ----------------------------------------------------
 // RESERVATIONS & PASSENGER ENDPOINTS
 // ----------------------------------------------------
@@ -182,8 +236,16 @@ export async function fetchReservationsApi() {
   return await fetchApi('/reservations');
 }
 
-export async function fetchUserReservationsApi(userId) {
-  return await fetchApi(`/reservations/user/${userId}`);
+export async function fetchUserReservationsApi(userId, email) {
+  const rawUserId = typeof userId === 'number' ? userId : parseInt(String(userId || '').replace(/\D/g, ''), 10);
+  if (rawUserId && !isNaN(rawUserId)) {
+    const query = email ? `?email=${encodeURIComponent(email)}` : '';
+    return await fetchApi(`/reservations/user/${rawUserId}${query}`);
+  }
+  if (email) {
+    return await fetchApi(`/reservations/email/${encodeURIComponent(email)}`);
+  }
+  return [];
 }
 
 export async function updateReservationApi(reservationId, data) {
@@ -220,6 +282,21 @@ export async function processPaymentApi(paymentData) {
   });
 }
 
+export async function sendPaymentOtpApi({ email, passengerName, amount, pnr }) {
+  return await fetchApi('/payments/send-otp', {
+    method: 'POST',
+    body: JSON.stringify({ email, passengerName, amount, pnr }),
+  });
+}
+
+export async function verifyPaymentOtpApi({ email, otpCode }) {
+  return await fetchApi('/payments/verify-otp', {
+    method: 'POST',
+    body: JSON.stringify({ email, otpCode }),
+  });
+}
+
+
 // ----------------------------------------------------
 // REFUNDS & CANCELLATIONS ENDPOINTS
 // ----------------------------------------------------
@@ -227,6 +304,12 @@ export async function processPaymentApi(paymentData) {
 export async function fetchRefundsApi() {
   return await fetchApi('/refunds');
 }
+
+export async function fetchRefundsByUserEmailApi(email) {
+  if (!email) return [];
+  return await fetchApi(`/refunds/user/${encodeURIComponent(email)}`);
+}
+
 
 export async function createRefundRequestApi(refundData) {
   return await fetchApi('/refunds', {

@@ -7,11 +7,14 @@ import {
   ArrowUpDown,
   ChevronDown,
   Check,
-  Pencil
+  Pencil,
+  Bell,
+  Sparkles
 } from 'lucide-react';
 import { INITIAL_FLIGHTS, INITIAL_AIRPORTS } from '../../data/mockData';
 import FlightDetailsModal from './FlightDetailsModal';
 import FlightCardItem from './FlightCardItem';
+import PriceAlertModal from './PriceAlertModal';
 
 const TRIP_LABELS = { roundtrip: 'Round trip', oneway: 'One way', multicity: 'Multi city' };
 
@@ -34,12 +37,13 @@ const formatDate = (value) => {
   return d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 };
 
-export default function FlightResultsView({ flights = INITIAL_FLIGHTS, searchCriteria, onSelectFlight, onModifySearch }) {
+export default function FlightResultsView({ flights = INITIAL_FLIGHTS, searchCriteria, user, onSelectFlight, onModifySearch }) {
   const [maxPrice, setMaxPrice] = useState(5000);
   const [stopsFilter, setStopsFilter] = useState('ALL'); // 'ALL', 'DIRECT', 'LAYOVER'
   const [sortBy, setSortBy] = useState('PRICE'); // 'PRICE', 'DURATION', 'DEPARTURE'
   const [viewMode, setViewMode] = useState('cards'); // 'cards' | 'table'
   const [selectedFlightForDetails, setSelectedFlightForDetails] = useState(null);
+  const [showPriceAlertModal, setShowPriceAlertModal] = useState(false);
   const [showFilters, setShowFilters] = useState(false); // mobile only
 
   const getPrice = (f) => {
@@ -120,13 +124,24 @@ export default function FlightResultsView({ flights = INITIAL_FLIGHTS, searchCri
             </p>
           </div>
 
-          <button
-            onClick={onModifySearch}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-5 py-3 text-sm font-bold backdrop-blur transition hover:bg-white/20 active:scale-[0.98] md:w-auto"
-          >
-            <Pencil className="h-4 w-4" />
-            Modify search
-          </button>
+          <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
+            <button
+              type="button"
+              onClick={() => setShowPriceAlertModal(true)}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-extrabold text-[#0a1230] shadow-xl shadow-black/20 transition hover:bg-blue-50 active:scale-[0.98] sm:w-auto"
+            >
+              <Bell className="h-4 w-4 text-blue-600" />
+              <span>Track Price</span>
+            </button>
+            <button
+              type="button"
+              onClick={onModifySearch}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-5 py-3 text-sm font-bold backdrop-blur transition hover:bg-white/20 active:scale-[0.98] sm:w-auto"
+            >
+              <Pencil className="h-4 w-4" />
+              <span>Modify search</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -416,6 +431,21 @@ export default function FlightResultsView({ flights = INITIAL_FLIGHTS, searchCri
         flight={selectedFlightForDetails}
         isOpen={!!selectedFlightForDetails}
         onClose={() => setSelectedFlightForDetails(null)}
+      />
+
+      {/* Flight Price Alerts & Saved Searches Modal */}
+      <PriceAlertModal
+        isOpen={showPriceAlertModal}
+        onClose={() => setShowPriceAlertModal(false)}
+        searchCriteria={searchCriteria}
+        lowestPrice={
+          filteredFlights.length > 0
+            ? Math.min(...filteredFlights.map((f) => getPrice(f)))
+            : 450
+        }
+        user={user}
+        originAirport={originAirport}
+        destAirport={destAirport}
       />
     </div>
   );

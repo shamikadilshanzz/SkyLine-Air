@@ -62,6 +62,15 @@ public class FlightController {
         if (flight.getStatus() == null || flight.getStatus().trim().isEmpty()) {
             flight.setStatus("ON_TIME");
         }
+        if ((flight.getDuration() == null || flight.getDuration().trim().isEmpty())
+                && flight.getDepartureTime() != null && flight.getArrivalTime() != null) {
+            long totalMinutes = java.time.Duration.between(flight.getDepartureTime(), flight.getArrivalTime()).toMinutes();
+            if (totalMinutes > 0) {
+                long hours = totalMinutes / 60;
+                long minutes = totalMinutes % 60;
+                flight.setDuration(String.format("%dh %02dm", hours, minutes));
+            }
+        }
 
         Flight savedFlight = flightRepository.save(flight);
         return ResponseEntity.status(HttpStatus.CREATED).body(savedFlight);
@@ -97,7 +106,16 @@ public class FlightController {
                 return ResponseEntity.badRequest().body(Map.of("message", "Arrival time must be strictly after departure time"));
             }
 
-            if (updatedFlight.getDuration() != null) existing.setDuration(updatedFlight.getDuration());
+            if (updatedFlight.getDuration() != null && !updatedFlight.getDuration().trim().isEmpty()) {
+                existing.setDuration(updatedFlight.getDuration());
+            } else if (existing.getDepartureTime() != null && existing.getArrivalTime() != null) {
+                long totalMinutes = java.time.Duration.between(existing.getDepartureTime(), existing.getArrivalTime()).toMinutes();
+                if (totalMinutes > 0) {
+                    long hours = totalMinutes / 60;
+                    long minutes = totalMinutes % 60;
+                    existing.setDuration(String.format("%dh %02dm", hours, minutes));
+                }
+            }
             if (updatedFlight.getStops() != null) existing.setStops(updatedFlight.getStops());
             if (updatedFlight.getHasLayover() != null) existing.setHasLayover(updatedFlight.getHasLayover());
             if (updatedFlight.getLayoverAirport() != null) existing.setLayoverAirport(updatedFlight.getLayoverAirport());

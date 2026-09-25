@@ -94,7 +94,7 @@ export const INITIAL_FLIGHTS = [
     stops: 1,
     layoverAirport: 'DXB',
     layoverCity: 'Dubai',
-    layoverDurationHours: 8.5, // Qualifies for hotel accommodation (UC-06)
+    layoverDurationHours: 8.5, // Qualifies for hotel accommodation
     aircraft: 'Airbus A350-900',
     tailNumber: '4R-SLB',
     priceEconomy: 780,

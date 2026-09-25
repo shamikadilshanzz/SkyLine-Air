@@ -10,7 +10,8 @@ import {
   Ticket,
   X,
   User,
-  Bed
+  Bed,
+  RefreshCw
 } from 'lucide-react';
 import { INITIAL_HOTELS } from '../../data/mockData';
 import HotelManagerPortal, { formatHotelFromApi } from './HotelManagerPortal';
@@ -56,80 +57,86 @@ export default function LayoverHotelView({ currentRole, user, onOpenAuth }) {
   const [hotelBooked, setHotelBooked] = useState(false);
   const [userBookings, setUserBookings] = useState([]);
   const [selectedCountryFilter, setSelectedCountryFilter] = useState('ALL');
+  const [voucherStatusFilter, setVoucherStatusFilter] = useState('ALL');
   const [bookingHotel, setBookingHotel] = useState(null);
   const [bookingError, setBookingError] = useState('');
   const [isSavingBooking, setIsSavingBooking] = useState(false);
+  const [isRefreshingVouchers, setIsRefreshingVouchers] = useState(false);
 
-  React.useEffect(() => {
-    async function loadSqlHotelsAndReservations() {
-      try {
-        const {
-          fetchHotelsApi,
-          fetchUserReservationsApi,
-          fetchHotelBookingsApi,
-          fetchHotelBookingsByUserApi
-        } = await import('../../api/apiService');
+  const loadHotelsAndReservations = React.useCallback(async () => {
+    setIsRefreshingVouchers(true);
+    try {
+      const {
+        fetchHotelsApi,
+        fetchUserReservationsApi,
+        fetchHotelBookingsApi,
+        fetchHotelBookingsByUserApi
+      } = await import('../../api/apiService');
 
-        const apiHotels = await fetchHotelsApi();
-        if (apiHotels && apiHotels.length > 0) {
-          const formattedHotels = apiHotels.map(formatHotelFromApi);
-          setHotels(formattedHotels);
-        }
+      const apiHotels = await fetchHotelsApi();
+      if (apiHotels && apiHotels.length > 0) {
+        const formattedHotels = apiHotels.map(formatHotelFromApi);
+        setHotels(formattedHotels);
+      }
 
-        const rawUserId = user?.rawId || (user?.id ? parseInt(String(user.id).replace(/\D/g, ''), 10) : null);
-        let ownReservations = [];
-        if (rawUserId) {
-          const apiRes = await fetchUserReservationsApi(rawUserId);
-          if (apiRes && apiRes.length > 0) {
-            ownReservations = apiRes.map(r => ({
-              pnr: r.pnrCode || r.pnr,
-              userName: r.userName || user?.name,
-              userEmail: r.userEmail || user?.email,
-              userId: r.userId || rawUserId,
-              flightNumber: r.flightNumber || 'SL-204',
-              origin: r.origin || 'CMB',
-              destination: r.destination || 'LHR',
-              hasLayover: r.hasLayover || false,
-              layoverCity: r.layoverCity || '',
-              layoverAirport: r.layoverAirport || '',
-              layoverDurationHours: r.layoverDurationHours || 0
-            }));
-            setReservations(ownReservations);
-            if (ownReservations[0]) setSelectedPnr(ownReservations[0].pnr);
-          } else {
-            setReservations([]);
-            setSelectedPnr('');
-          }
+      const rawUserId = user?.rawId || (user?.id ? parseInt(String(user.id).replace(/\D/g, ''), 10) : null);
+      let ownReservations = [];
+      if (rawUserId) {
+        const apiRes = await fetchUserReservationsApi(rawUserId);
+        if (apiRes && apiRes.length > 0) {
+          ownReservations = apiRes.map(r => ({
+            pnr: r.pnrCode || r.pnr,
+            userName: r.userName || user?.name,
+            userEmail: r.userEmail || user?.email,
+            userId: r.userId || rawUserId,
+            flightNumber: r.flightNumber || 'SL-204',
+            origin: r.origin || 'CMB',
+            destination: r.destination || 'LHR',
+            hasLayover: r.hasLayover || false,
+            layoverCity: r.layoverCity || '',
+            layoverAirport: r.layoverAirport || '',
+            layoverDurationHours: r.layoverDurationHours || 0
+          }));
+          setReservations(ownReservations);
+          if (ownReservations[0]) setSelectedPnr(ownReservations[0].pnr);
         } else {
           setReservations([]);
           setSelectedPnr('');
         }
-
-        let apiBookings = [];
-        if (rawUserId) {
-          apiBookings = await fetchHotelBookingsByUserApi(rawUserId);
-        }
-        if (!apiBookings || apiBookings.length === 0) {
-          const allBookings = await fetchHotelBookingsApi();
-          apiBookings = (allBookings || []).filter((b) => isOwnHotelBooking(b, user));
-        } else {
-          apiBookings = apiBookings.filter((b) => isOwnHotelBooking(b, user));
-        }
-
-        if (user && apiBookings.length > 0) {
-          const formattedBookings = apiBookings.map((b) => formatHotelBooking(b, user.name));
-          setUserBookings(formattedBookings);
-          setHotelBooked(true);
-        } else {
-          setUserBookings([]);
-          setHotelBooked(false);
-        }
-      } catch (err) {
-        console.warn('[LayoverHotelView] SQL fetch notice:', err.message);
+      } else {
+        setReservations([]);
+        setSelectedPnr('');
       }
+
+      let apiBookings = [];
+      if (rawUserId) {
+        apiBookings = await fetchHotelBookingsByUserApi(rawUserId);
+      }
+      if (!apiBookings || apiBookings.length === 0) {
+        const allBookings = await fetchHotelBookingsApi();
+        apiBookings = (allBookings || []).filter((b) => isOwnHotelBooking(b, user));
+      } else {
+        apiBookings = apiBookings.filter((b) => isOwnHotelBooking(b, user));
+      }
+
+      if (user && apiBookings.length > 0) {
+        const formattedBookings = apiBookings.map((b) => formatHotelBooking(b, user.name));
+        setUserBookings(formattedBookings);
+        setHotelBooked(true);
+      } else {
+        setUserBookings([]);
+        setHotelBooked(false);
+      }
+    } catch (err) {
+      console.warn('[LayoverHotelView] SQL fetch notice:', err.message);
+    } finally {
+      setIsRefreshingVouchers(false);
     }
-    loadSqlHotelsAndReservations();
   }, [user]);
+
+  React.useEffect(() => {
+    loadHotelsAndReservations();
+  }, [loadHotelsAndReservations]);
 
   // Booking sheet: lock page scroll and close on Escape
   React.useEffect(() => {

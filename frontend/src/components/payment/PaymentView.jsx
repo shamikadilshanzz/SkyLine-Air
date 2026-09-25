@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   CreditCard,
   ShieldCheck,
@@ -18,7 +18,12 @@ import {
   Building2,
   MapPin,
   Bed,
-  Star
+  Star,
+  RefreshCw,
+  Clock,
+  Key,
+  Send,
+  ArrowRight
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -114,9 +119,25 @@ export default function PaymentView({
   const [discountAmount, setDiscountAmount] = useState(0);
   const [usePoints, setUsePoints] = useState(false);
 
-  // OTP Modal State
+  // User Destination Email for Real-Time OTP Verification
+  const initialEmail =
+    reservationData?.passenger?.email ||
+    reservationData?.passengers?.[0]?.email ||
+    user?.email ||
+    'passenger@skylineair.com';
+  const [otpEmail, setOtpEmail] = useState(initialEmail);
+  const [isEditingEmail, setIsEditingEmail] = useState(false);
+
+  // OTP Modal State & Live Timer
   const [showOtpModal, setShowOtpModal] = useState(false);
-  const [otpInput, setOtpInput] = useState('883920');
+  const [otpInput, setOtpInput] = useState('');
+  const [otpTimer, setOtpTimer] = useState(300); // 5 minutes
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [otpError, setOtpError] = useState('');
+  const [otpSuccessMessage, setOtpSuccessMessage] = useState('');
+  const [demoOtpPreview, setDemoOtpPreview] = useState('');
+  const [resendCooldown, setResendCooldown] = useState(0);
+
   const [paymentCompleted, setPaymentCompleted] = useState(
     Boolean(
       reservationData?.status === 'CONFIRMED' ||
@@ -127,6 +148,71 @@ export default function PaymentView({
   const [transactionRef, setTransactionRef] = useState(
     reservationData?.transactionRef || 'TXN-9938102938'
   );
+
+  // Synchronize initial email when user/reservation changes
+  useEffect(() => {
+    if (user?.email && !otpEmail) {
+      setOtpEmail(user.email);
+    }
+  }, [user]);
+
+  // Live Countdown Timer for OTP Expiration
+  useEffect(() => {
+    let interval = null;
+    if (showOtpModal && otpTimer > 0 && !paymentCompleted) {
+      interval = setInterval(() => {
+        setOtpTimer((prev) => (prev > 0 ? prev - 1 : 0));
+      }, 1000);
+    } else if (otpTimer === 0) {
+      setOtpError('Your verification code has expired. Please click "Resend Code" to receive a fresh OTP.');
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [showOtpModal, otpTimer, paymentCompleted]);
+
+  // Resend Cooldown Timer (30s)
+  useEffect(() => {
+    let cdInterval = null;
+    if (resendCooldown > 0) {
+      cdInterval = setInterval(() => {
+        setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+      }, 1000);
+    }
+    return () => {
+      if (cdInterval) clearInterval(cdInterval);
+    };
+  }, [resendCooldown]);
+
+  // Trigger Backend Real-Time Email OTP Dispatch
+  const triggerSendOtp = async (targetEmailAddress) => {
+    const emailToSend = (targetEmailAddress || otpEmail || user?.email || 'passenger@skylineair.com').trim();
+    setIsSendingOtp(true);
+    setOtpError('');
+    setOtpSuccessMessage('');
+
+    try {
+      const { sendPaymentOtpApi } = await import('../../api/apiService');
+      const response = await sendPaymentOtpApi({
+        email: emailToSend,
+        passengerName: cardName || user?.name || reservationData?.passenger?.firstName ? `${reservationData?.passenger?.firstName} ${reservationData?.passenger?.lastName}` : 'Valued Passenger',
+        amount: totalAmount,
+        pnr: reservationData?.pnr || 'SK-PENDING'
+      });
+
+      setOtpTimer(300); // Reset to 5 mins
+      setResendCooldown(30); // 30 seconds cooldown
+      setOtpSuccessMessage(response?.message || `Real-time OTP verification code sent to ${emailToSend}`);
+      if (response?.otpPreview) {
+        setDemoOtpPreview(response.otpPreview);
+      }
+    } catch (err) {
+      console.warn('[PaymentView] OTP Send error:', err.message);
+      setOtpError(`Could not dispatch OTP email: ${err.message}. Please check connection.`);
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
 
   // Multi-Passenger Fare calculations
   const passengerCount = reservationData?.passengers?.length || reservationData?.passengerCount || reservationData?.flight?.passengers || 1;
@@ -160,7 +246,7 @@ export default function PaymentView({
 
   const [cardValidationError, setCardValidationError] = useState('');
 
-  const handleStartPayment = (e) => {
+  const handleStartPayment = async (e) => {
     e.preventDefault();
     setCardValidationError('');
 
@@ -189,20 +275,42 @@ export default function PaymentView({
       }
     }
 
+    // Open OTP modal and trigger real-time email dispatch
+    setOtpInput('');
     setShowOtpModal(true);
+    await triggerSendOtp(otpEmail);
   };
 
   const handleVerifyOtp = async () => {
+    if (!otpInput || otpInput.trim().length < 4) {
+      setOtpError('Please enter the 6-digit verification code received in your email.');
+      return;
+    }
+
+    if (otpTimer === 0) {
+      setOtpError('Your code has expired. Please click "Resend Code" to generate a new OTP.');
+      return;
+    }
+
     setIsProcessing(true);
-    const generatedTxn = `TXN-${Math.floor(1000000000 + Math.random() * 9000000000)}`;
+    setOtpError('');
 
     try {
-      const { createReservationApi, processPaymentApi } = await import('../../api/apiService');
+      const { verifyPaymentOtpApi, createReservationApi, processPaymentApi } = await import('../../api/apiService');
+
+      // 1. Verify OTP with Spring Boot backend
+      await verifyPaymentOtpApi({
+        email: otpEmail.trim(),
+        otpCode: otpInput.trim()
+      });
+
+      // 2. If OTP is valid, proceed with booking finalization
+      const generatedTxn = `TXN-${Math.floor(1000000000 + Math.random() * 9000000000)}`;
       const resRecord = await createReservationApi({
         pnrCode: reservationData?.pnr || `SK-${Math.floor(100000 + Math.random() * 900000)}`,
-        userId: user?.rawId || (user?.id ? parseInt(String(user.id).replace(/\D/g, '')) || 1 : 1),
-        userName: user?.name || reservationData?.passenger?.firstName ? `${reservationData.passenger.firstName} ${reservationData.passenger.lastName}` : 'Alex Morgan',
-        userEmail: user?.email || 'alex.morgan@skyline.com',
+        userId: user?.rawId || (user?.id ? parseInt(String(user.id).replace(/\D/g, ''), 10) : null),
+        userName: user?.name || (reservationData?.passenger?.firstName ? `${reservationData.passenger.firstName} ${reservationData.passenger.lastName}` : (cardName || 'Passenger')),
+        userEmail: otpEmail || user?.email || 'passenger@skylineair.com',
         flightId: reservationData?.flight?.rawId || 1,
         flightNumber: reservationData?.flight?.flightNumber || 'SL-204',
         origin: reservationData?.flight?.origin || 'CMB',
@@ -638,6 +746,19 @@ export default function PaymentView({
                   />
                 </div>
 
+                {/* Email OTP Verification Notice */}
+                <div className="flex items-center gap-2.5 rounded-2xl border border-blue-100 bg-blue-50/60 p-3 text-xs text-blue-900">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-blue-600 text-white shrink-0">
+                    <Mail className="h-3.5 w-3.5" />
+                  </div>
+                  <div className="flex-1 overflow-hidden">
+                    <span className="text-[10px] font-extrabold uppercase text-blue-600 block">Security Verification</span>
+                    <span className="text-[11px] font-medium text-slate-700 block truncate">
+                      A 6-digit real-time OTP will be sent to <strong>{otpEmail}</strong> to authorize this payment.
+                    </span>
+                  </div>
+                </div>
+
                 <button
                   type="submit"
                   className={`group flex w-full items-center justify-center gap-2.5 rounded-2xl py-4 text-sm font-extrabold focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-500/30 ${PRIMARY_BTN}`}
@@ -813,7 +934,7 @@ export default function PaymentView({
                   onClick={onNavigateToHotels}
                   className="flex animate-bounce items-center gap-1.5 rounded-xl bg-amber-400 px-4 py-2.5 text-xs font-black text-slate-950 shadow-md transition hover:bg-amber-300"
                 >
-                  🏨 Book layover hotel (UC-06)
+                  🏨 Book layover hotel
                 </button>
               )}
             </div>
@@ -976,35 +1097,173 @@ export default function PaymentView({
         </div>
       )}
 
-      {/* OTP Verification Modal */}
+      {/* Real-Time Email OTP Verification Modal */}
       {showOtpModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-          <div className={`w-full max-w-sm space-y-4 p-6 text-center ${CARD}`}>
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
-              <ShieldCheck className="h-6 w-6" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-md">
+          <div className={`relative w-full max-w-md overflow-hidden rounded-[2rem] border border-slate-200/80 bg-white p-6 md:p-8 text-center shadow-2xl space-y-5 animate-in fade-in zoom-in duration-200`}>
+
+            {/* Ambient Background Accent */}
+            <div className="pointer-events-none absolute -right-12 -top-12 h-36 w-36 rounded-full bg-blue-500/10 blur-2xl" />
+            <div className="pointer-events-none absolute -left-12 -bottom-12 h-36 w-36 rounded-full bg-indigo-500/10 blur-2xl" />
+
+            {/* Header Badge */}
+            <div className="relative mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-600/30">
+              <ShieldCheck className="h-7 w-7" />
+              {isSendingOtp && (
+                <span className="absolute -top-1 -right-1 flex h-4 w-4">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-4 w-4 bg-amber-500 text-[9px] font-bold text-white items-center justify-center">!</span>
+                </span>
+              )}
             </div>
 
-            <div>
-              <h3 className="text-base font-extrabold text-slate-900">3D Secure OTP verification</h3>
-              <p className="mt-1 text-xs text-slate-500">
-                Enter the 6-digit authorization code sent to your registered phone number for ${totalAmount} USD.
+            <div className="space-y-1">
+              <span className="text-[10px] font-extrabold uppercase tracking-widest text-blue-600">SkyLine 3D-Secure 2.0</span>
+              <h3 className="text-xl font-black text-slate-900">Email OTP Verification</h3>
+              <p className="text-xs text-slate-500">
+                A 6-digit authorization code has been dispatched for <strong className="text-slate-900 font-bold">${totalAmount} USD</strong>.
               </p>
             </div>
 
-            <input
-              type="text"
-              value={otpInput}
-              onChange={(e) => setOtpInput(e.target.value)}
-              className="w-full rounded-xl border border-slate-300 bg-slate-50 p-3 text-center font-mono text-xl font-bold tracking-widest outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
-            />
+            {/* Target Email Chip */}
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 flex items-center justify-between gap-2 text-left">
+              <div className="flex items-center gap-2.5 overflow-hidden">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-100/80 text-blue-600 shrink-0">
+                  <Mail className="h-4 w-4" />
+                </div>
+                <div className="truncate">
+                  <span className="block text-[10px] font-bold uppercase text-slate-400">Recipient Email</span>
+                  {!isEditingEmail ? (
+                    <span className="font-mono text-xs font-bold text-slate-900 truncate block">{otpEmail}</span>
+                  ) : (
+                    <input
+                      type="email"
+                      value={otpEmail}
+                      onChange={(e) => setOtpEmail(e.target.value)}
+                      className="w-full rounded-lg border border-blue-400 bg-white px-2 py-0.5 text-xs font-bold text-slate-900 outline-none"
+                    />
+                  )}
+                </div>
+              </div>
 
-            <button
-              onClick={handleVerifyOtp}
-              disabled={isProcessing}
-              className={`flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-xs font-extrabold disabled:opacity-70 ${PRIMARY_BTN}`}
-            >
-              {isProcessing ? 'Verifying with bank...' : 'Authorize transaction'}
-            </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (isEditingEmail) {
+                    triggerSendOtp(otpEmail);
+                    setIsEditingEmail(false);
+                  } else {
+                    setIsEditingEmail(true);
+                  }
+                }}
+                className="rounded-xl px-2.5 py-1 text-[11px] font-bold text-blue-600 hover:bg-blue-100/60 transition"
+              >
+                {isEditingEmail ? 'Update & Send' : 'Change'}
+              </button>
+            </div>
+
+            {/* Notification / Success Status Banner */}
+            {otpSuccessMessage && !otpError && (
+              <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-left text-xs font-semibold text-emerald-800">
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                <span className="truncate">{otpSuccessMessage}</span>
+              </div>
+            )}
+
+            {/* Error Message Banner */}
+            {otpError && (
+              <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-left text-xs font-bold text-red-700">
+                <AlertCircle className="h-4 w-4 shrink-0 text-red-600" />
+                <span>{otpError}</span>
+              </div>
+            )}
+
+            {/* OTP Code Input Field */}
+            <div className="space-y-2">
+              <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-700">
+                Enter 6-Digit Code
+              </label>
+              <input
+                type="text"
+                maxLength={6}
+                autoFocus
+                value={otpInput}
+                placeholder="• • • • • •"
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, '');
+                  setOtpInput(val);
+                  if (otpError) setOtpError('');
+                }}
+                className="w-full rounded-2xl border-2 border-slate-200 bg-slate-50 py-3.5 text-center font-mono text-3xl font-black tracking-[0.4em] text-blue-900 outline-none transition focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-500/15"
+              />
+
+              {/* Expiry Countdown Timer */}
+              <div className="flex items-center justify-between px-1 text-xs">
+                <div className={`flex items-center gap-1.5 font-bold ${otpTimer < 60 ? 'text-red-600 animate-pulse' : 'text-slate-600'}`}>
+                  <Clock className="h-3.5 w-3.5" />
+                  <span>
+                    Expires in: {Math.floor(otpTimer / 60)}:{(otpTimer % 60).toString().padStart(2, '0')}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={resendCooldown > 0 || isSendingOtp}
+                  onClick={() => triggerSendOtp(otpEmail)}
+                  className="flex items-center gap-1 text-xs font-extrabold text-blue-600 hover:text-blue-700 disabled:text-slate-400 disabled:cursor-not-allowed"
+                >
+                  <RefreshCw className={`h-3 w-3 ${isSendingOtp ? 'animate-spin' : ''}`} />
+                  <span>{resendCooldown > 0 ? `Resend (${resendCooldown}s)` : 'Resend Code'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Demo Preview Badge (Helpful for quick test runs) */}
+            {demoOtpPreview && (
+              <div className="flex items-center justify-between rounded-xl border border-dashed border-blue-200 bg-blue-50/70 p-2 text-xs">
+                <span className="text-slate-600 text-[11px]">Server Generated Code:</span>
+                <button
+                  type="button"
+                  onClick={() => setOtpInput(demoOtpPreview)}
+                  className="font-mono font-black text-blue-600 hover:underline bg-white px-2 py-0.5 rounded border border-blue-200"
+                  title="Click to auto-fill OTP"
+                >
+                  {demoOtpPreview} (Auto-Fill)
+                </button>
+              </div>
+            )}
+
+            {/* Modal Actions */}
+            <div className="space-y-2 pt-2">
+              <button
+                onClick={handleVerifyOtp}
+                disabled={isProcessing || isSendingOtp || !otpInput}
+                className={`flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-xs font-black disabled:opacity-50 ${PRIMARY_BTN}`}
+              >
+                {isProcessing ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    <span>Verifying & Confirming Booking...</span>
+                  </>
+                ) : (
+                  <>
+                    <Lock className="h-4 w-4" />
+                    <span>Verify Code & Pay ${totalAmount}</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowOtpModal(false);
+                  setOtpError('');
+                }}
+                className="w-full rounded-xl py-2 text-xs font-bold text-slate-500 hover:text-slate-800 transition"
+              >
+                Cancel & return to payment options
+              </button>
+            </div>
           </div>
         </div>
       )}
