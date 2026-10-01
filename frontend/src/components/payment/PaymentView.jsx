@@ -334,27 +334,27 @@ export default function PaymentView({
         passengers: (reservationData?.passengers && reservationData.passengers.length > 0)
           ? reservationData.passengers.map(p => ({
             title: p.title || 'Mr',
-            firstName: p.firstName || 'Alex',
-            lastName: p.lastName || 'Morgan',
-            dob: p.dob || '1992-05-14',
-            passportNumber: p.passport || 'N9849201',
-            nationality: p.nationality || 'Sri Lanka',
-            seatNumber: p.seat || '14A',
+            firstName: p.firstName || user?.firstName || 'Alex',
+            lastName: p.lastName || user?.lastName || 'Morgan',
+            dob: p.dob || user?.dob || '1992-05-14',
+            passportNumber: p.passportNumber || p.passport || user?.passportNumber || 'N9849201',
+            nationality: p.nationality || user?.nationality || user?.country || 'USA',
+            seatNumber: p.seatNumber || p.seat || '14A',
             cabinClass: p.cabinClass || effectiveCabinClass,
             mealPreference: p.mealDetails?.name || p.meal || 'Standard',
             extraBaggageKg: p.extraBaggageKg || 0
           }))
           : [
             {
-              title: reservationData?.passenger?.title || 'Mr',
-              firstName: reservationData?.passenger?.firstName || 'Alex',
-              lastName: reservationData?.passenger?.lastName || 'Morgan',
-              dob: reservationData?.passenger?.dob || '1992-05-14',
-              passportNumber: reservationData?.passenger?.passport || 'N9849201',
-              nationality: reservationData?.passenger?.nationality || 'Sri Lanka',
-              seatNumber: reservationData?.seat || '14A',
+              title: reservationData?.passenger?.title || user?.title || 'Mr',
+              firstName: reservationData?.passenger?.firstName || user?.firstName || 'Alex',
+              lastName: reservationData?.passenger?.lastName || user?.lastName || 'Morgan',
+              dob: reservationData?.passenger?.dob || user?.dob || '1992-05-14',
+              passportNumber: reservationData?.passenger?.passportNumber || reservationData?.passenger?.passport || user?.passportNumber || 'N9849201',
+              nationality: reservationData?.passenger?.nationality || user?.nationality || user?.country || 'USA',
+              seatNumber: reservationData?.passenger?.seatNumber || reservationData?.passenger?.seat || reservationData?.seat || '14A',
               cabinClass: effectiveCabinClass,
-              mealPreference: reservationData?.passenger?.mealDetails?.name || 'Standard',
+              mealPreference: reservationData?.passenger?.mealDetails?.name || reservationData?.passenger?.meal || 'Standard',
               extraBaggageKg: reservationData?.passenger?.extraBaggageKg || 0
             }
           ]
@@ -396,6 +396,21 @@ export default function PaymentView({
       setShowOtpModal(false);
       setPaymentCompleted(true);
       setTransactionRef(generatedTxn);
+
+      // Cache newly occupied seats for real-time immediate seat map locking
+      const flightNo = reservationData?.flight?.flightNumber;
+      if (flightNo) {
+        try {
+          const bookedSeats = (reservationData.passengers || [reservationData.passenger])
+            .map(p => p.seatNumber || p.seat || (typeof p === 'string' ? p : null))
+            .filter(Boolean)
+            .map(s => String(s).trim().toUpperCase());
+          const existingCached = JSON.parse(localStorage.getItem(`skyline_occupied_${flightNo}`) || '[]');
+          const combined = Array.from(new Set([...existingCached, ...bookedSeats]));
+          localStorage.setItem(`skyline_occupied_${flightNo}`, JSON.stringify(combined));
+          window.dispatchEvent(new Event('skyline_seats_updated'));
+        } catch (cErr) {}
+      }
 
       if (onPaymentSuccess) {
         onPaymentSuccess({

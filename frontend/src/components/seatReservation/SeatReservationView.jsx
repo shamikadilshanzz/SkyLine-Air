@@ -43,6 +43,7 @@ function parseAmenities(amenities) {
 export default function SeatReservationView({
   selectedFlight,
   currentRole,
+  user,
   airports = [],
   onConfirmReservation,
   onBackToResults,
@@ -53,6 +54,7 @@ export default function SeatReservationView({
   const unitPrice = selectedFlight?.unitPrice || selectedFlight?.priceEconomy || 350;
   const baseFlightPrice = selectedFlight?.price || (unitPrice * passengerCount);
   const flightCabinClass = (selectedFlight?.cabinClass || selectedFlight?.selectedClass || 'ECONOMY').toUpperCase();
+  const flightNum = selectedFlight?.flightNumber || selectedFlight?.flightNum || '';
 
   const getDefaultSeatsForCabin = (cabin) => {
     if (cabin === 'FIRST') {
@@ -61,7 +63,7 @@ export default function SeatReservationView({
     if (cabin === 'BUSINESS') {
       return ['2A', '2B', '2C', '2D', '3A', '3B'];
     }
-    return ['14A', '14B', '14C', '14D', '14E', '14F'];
+    return ['4A', '4B', '4C', '4D', '4E', '4F', '5A', '5B', '5C', '5D', '5E', '5F'];
   };
 
   const [holdSeconds, setHoldSeconds] = useState(600); // 10 minute hold countdown
@@ -77,48 +79,106 @@ export default function SeatReservationView({
   // Active Passenger Tab Index State
   const [activePassengerIdx, setActivePassengerIdx] = useState(0);
 
-  // Multi-Passenger Detail Form State
-  const [passengersList, setPassengersList] = useState(() => {
-    const defaultSeats = getDefaultSeatsForCabin(flightCabinClass);
-    const defaultNames = [
-      { title: 'Mr', firstName: 'Alex', lastName: 'Morgan', passport: 'N9849201' },
-      { title: 'Ms', firstName: 'Sarah', lastName: 'Morgan', passport: 'N7739102' },
-      { title: 'Mr', firstName: 'James', lastName: 'Morgan', passport: 'N5529103' },
-      { title: 'Mrs', firstName: 'Emma', lastName: 'Morgan', passport: 'N4419104' },
-    ];
-    return Array.from({ length: passengerCount }, (_, i) => ({
-      id: i + 1,
-      title: defaultNames[i % defaultNames.length].title,
-      firstName: defaultNames[i % defaultNames.length].firstName,
-      lastName: defaultNames[i % defaultNames.length].lastName,
-      dob: '1992-05-14',
-      passport: defaultNames[i % defaultNames.length].passport,
-      gender: 'Male',
-      nationality: 'Sri Lanka',
-      seat: defaultSeats[i % defaultSeats.length],
-      cabinClass: flightCabinClass,
-      meal: PRESET_MEALS[0].name,
-      mealDetails: PRESET_MEALS[0],
-      extraBaggageKg: 0,
-    }));
+  // Synchronous initial occupied seats from localStorage cache
+  const [occupiedSeats, setOccupiedSeats] = useState(() => {
+    if (!flightNum) return [];
+    try {
+      const cached = JSON.parse(localStorage.getItem(`skyline_occupied_${flightNum}`) || '[]');
+      return Array.isArray(cached) ? cached.map(s => String(s).trim().toUpperCase()) : [];
+    } catch (e) {
+      return [];
+    }
   });
 
-  // Sync passengers' cabinClass and default seats if selectedFlight cabin changes
-  useEffect(() => {
-    const defaultSeats = getDefaultSeatsForCabin(flightCabinClass);
-    setPassengersList(prev => prev.map((p, i) => {
-      const seatRow = parseInt(p.seat ? p.seat.replace(/\D/g, '') : '0', 10);
-      let needsReset = false;
-      if (flightCabinClass === 'FIRST' && seatRow !== 1) needsReset = true;
-      if (flightCabinClass === 'BUSINESS' && (seatRow < 2 || seatRow > 3)) needsReset = true;
-      if (flightCabinClass === 'ECONOMY' && (seatRow <= 3 && seatRow > 0)) needsReset = true;
+  const [occupiedModalSeat, setOccupiedModalSeat] = useState(null);
 
+  const getFreeSeatForCabin = (cabin, occupiedList = [], excludeSeats = []) => {
+    const cols = ['A', 'B', 'C', 'D', 'E', 'F'];
+    let minRow = 4, maxRow = 15;
+    if (cabin === 'FIRST') { minRow = 1; maxRow = 1; }
+    else if (cabin === 'BUSINESS') { minRow = 2; maxRow = 3; }
+    
+    for (let r = minRow; r <= maxRow; r++) {
+      for (let c of cols) {
+        const candidate = `${r}${c}`;
+        if (!occupiedList.includes(candidate) && !excludeSeats.includes(candidate)) {
+          return candidate;
+        }
+      }
+    }
+    return '';
+  };
+
+  // Multi-Passenger Detail Form State
+  const [passengersList, setPassengersList] = useState(() => {
+    let initialOccupied = [];
+    if (flightNum) {
+      try {
+        const cached = JSON.parse(localStorage.getItem(`skyline_occupied_${flightNum}`) || '[]');
+        if (Array.isArray(cached)) initialOccupied = cached.map(s => String(s).trim().toUpperCase());
+      } catch (e) {}
+    }
+    const defaultNames = [
+      {
+        title: user?.title || 'Mr',
+        firstName: user?.firstName || (user?.name ? user.name.split(' ')[0] : 'Alex'),
+        lastName: user?.lastName || (user?.name ? user.name.split(' ').slice(1).join(' ') : 'Morgan'),
+        passport: user?.passportNumber || 'N9849201',
+        nationality: user?.nationality || user?.country || 'USA',
+        dob: user?.dob || '1992-05-14'
+      },
+      { title: 'Ms', firstName: 'Sarah', lastName: 'Morgan', passport: 'N7739102', nationality: user?.nationality || user?.country || 'USA', dob: '1994-08-20' },
+      { title: 'Mr', firstName: 'James', lastName: 'Morgan', passport: 'N5529103', nationality: user?.nationality || user?.country || 'USA', dob: '1990-11-15' },
+      { title: 'Mrs', firstName: 'Emma', lastName: 'Morgan', passport: 'N4419104', nationality: user?.nationality || user?.country || 'USA', dob: '1993-02-28' },
+    ];
+    const assignedSeats = [];
+    return Array.from({ length: passengerCount }, (_, i) => {
+      const def = defaultNames[i % defaultNames.length];
+      let seat = getFreeSeatForCabin(flightCabinClass, initialOccupied, assignedSeats);
+      if (seat) assignedSeats.push(seat);
       return {
-        ...p,
+        id: i + 1,
+        title: def.title,
+        firstName: def.firstName,
+        lastName: def.lastName,
+        dob: def.dob,
+        passport: def.passport,
+        gender: 'Male',
+        nationality: def.nationality || 'USA',
+        seat: seat || '',
         cabinClass: flightCabinClass,
-        seat: needsReset ? defaultSeats[i % defaultSeats.length] : (p.seat || defaultSeats[i % defaultSeats.length])
+        meal: PRESET_MEALS[0].name,
+        mealDetails: PRESET_MEALS[0],
+        extraBaggageKg: 0,
       };
-    }));
+    });
+  });
+
+  // Sync passengers' cabinClass and free seats if selectedFlight cabin changes
+  useEffect(() => {
+    setPassengersList(prev => {
+      const assigned = [];
+      return prev.map((p) => {
+        const seatRow = parseInt(p.seat ? p.seat.replace(/\D/g, '') : '0', 10);
+        let needsReset = false;
+        if (flightCabinClass === 'FIRST' && seatRow !== 1) needsReset = true;
+        if (flightCabinClass === 'BUSINESS' && (seatRow < 2 || seatRow > 3)) needsReset = true;
+        if (flightCabinClass === 'ECONOMY' && (seatRow <= 3 && seatRow > 0)) needsReset = true;
+        if (occupiedSeats.includes(p.seat)) needsReset = true;
+
+        let finalSeat = p.seat;
+        if (needsReset || !finalSeat) {
+          finalSeat = getFreeSeatForCabin(flightCabinClass, occupiedSeats, assigned);
+        }
+        if (finalSeat) assigned.push(finalSeat);
+
+        return {
+          ...p,
+          cabinClass: flightCabinClass,
+          seat: finalSeat
+        };
+      });
+    });
   }, [flightCabinClass]);
 
   const activePassenger = passengersList[activePassengerIdx] || passengersList[0];
@@ -127,9 +187,110 @@ export default function SeatReservationView({
     setPassengersList(prev => prev.map((p, idx) => idx === activePassengerIdx ? { ...p, ...updatedFields } : p));
   };
 
-  // Strictly enforce seat limit: 1 seat per passenger & validate cabin rows
+  // Fetch live occupied seats for this flight from database & local storage caches
+  useEffect(() => {
+    let isMounted = true;
+    async function loadOccupiedSeats() {
+      const flightRawId = selectedFlight?.rawId || selectedFlight?.flightId || (selectedFlight?.id && !String(selectedFlight.id).startsWith('FL-') ? selectedFlight.id : null);
+      
+      const foundOccupied = new Set();
+
+      // 1. Try dedicated live occupied-seats endpoint
+      try {
+        const { fetchOccupiedSeatsApi } = await import('../../api/apiService');
+        const apiData = await fetchOccupiedSeatsApi(flightNum, flightRawId);
+        if (Array.isArray(apiData)) {
+          apiData.forEach(s => s && foundOccupied.add(String(s).trim().toUpperCase()));
+        }
+      } catch (err) {
+        console.warn('[SeatReservationView] Direct occupied seats API notice:', err.message);
+      }
+
+      // 2. Also fetch all active reservations to guarantee synchronization
+      try {
+        const { fetchReservationsApi } = await import('../../api/apiService');
+        const allRes = await fetchReservationsApi();
+        if (Array.isArray(allRes)) {
+          allRes.forEach(r => {
+            const isMatch = (flightNum && r.flightNumber && r.flightNumber.toUpperCase() === flightNum.toUpperCase()) ||
+                            (flightRawId && r.flightId === flightRawId);
+            if (isMatch && r.bookingStatus !== 'CANCELLED') {
+              if (r.passengers && Array.isArray(r.passengers)) {
+                r.passengers.forEach(p => {
+                  if (p.seatNumber) foundOccupied.add(String(p.seatNumber).trim().toUpperCase());
+                  if (p.seat) foundOccupied.add(String(p.seat).trim().toUpperCase());
+                });
+              }
+            }
+          });
+        }
+      } catch (err) {
+        console.warn('[SeatReservationView] Reservations fallback notice:', err.message);
+      }
+
+      // 3. Check local storage cache
+      if (flightNum) {
+        try {
+          const cached = JSON.parse(localStorage.getItem(`skyline_occupied_${flightNum}`) || '[]');
+          if (Array.isArray(cached)) {
+            cached.forEach(s => s && foundOccupied.add(String(s).trim().toUpperCase()));
+          }
+        } catch (e) {}
+      }
+
+      if (isMounted) {
+        const list = Array.from(foundOccupied);
+        setOccupiedSeats(list);
+
+        // Update local storage cache to keep it in sync
+        if (flightNum && list.length > 0) {
+          try {
+            localStorage.setItem(`skyline_occupied_${flightNum}`, JSON.stringify(list));
+          } catch (e) {}
+        }
+
+        // Automatically ensure no passenger default starts on an occupied seat
+        setPassengersList(prev => {
+          const assigned = [];
+          return prev.map(p => {
+            let s = p.seat ? String(p.seat).trim().toUpperCase() : '';
+            if (!s || list.includes(s) || assigned.includes(s)) {
+              s = getFreeSeatForCabin(flightCabinClass, list, assigned);
+            }
+            if (s) assigned.push(s);
+            return { ...p, seat: s };
+          });
+        });
+      }
+    }
+
+    loadOccupiedSeats();
+
+    // Listen for custom realtime seat update events
+    const handleSeatUpdateEvent = () => {
+      loadOccupiedSeats();
+    };
+    window.addEventListener('skyline_seats_updated', handleSeatUpdateEvent);
+    window.addEventListener('storage', handleSeatUpdateEvent);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('skyline_seats_updated', handleSeatUpdateEvent);
+      window.removeEventListener('storage', handleSeatUpdateEvent);
+    };
+  }, [flightNum, selectedFlight?.id, flightCabinClass]);
+
+  // Strictly enforce seat limit: 1 seat per passenger & validate cabin rows & occupied status
   const handleSelectSeat = (seatId) => {
-    const seatRow = parseInt(seatId.replace(/\D/g, ''), 10);
+    const cleanSeat = String(seatId).trim().toUpperCase();
+    if (occupiedSeats.includes(cleanSeat)) {
+      setOccupiedModalSeat(cleanSeat);
+      setFormError(`⚠️ Seat ${cleanSeat} is ALREADY OCCUPIED on flight ${flightNum || ''} by another passenger! Seats cannot be selected or duplicated unless the previous booking is cancelled and refunded.`);
+      setPassengersList(prev => prev.map(p => p.seat === cleanSeat ? { ...p, seat: '' } : p));
+      return;
+    }
+
+    const seatRow = parseInt(cleanSeat.replace(/\D/g, ''), 10);
     if (flightCabinClass === 'FIRST' && seatRow !== 1) {
       setFormError('Your flight reservation is FIRST CLASS. Please select seats in Row 1 (First Class Cabin).');
       return;
@@ -147,8 +308,8 @@ export default function SeatReservationView({
     setPassengersList(prev => {
       return prev.map((p, idx) => {
         if (idx === activePassengerIdx) {
-          return { ...p, seat: p.seat === seatId ? '' : seatId };
-        } else if (p.seat === seatId) {
+          return { ...p, seat: p.seat === cleanSeat ? '' : cleanSeat };
+        } else if (p.seat === cleanSeat) {
           // If another passenger held this seat, clear it so no duplicate seats exist
           return { ...p, seat: '' };
         }
@@ -178,7 +339,6 @@ export default function SeatReservationView({
   const seatsPerRow = 6;
   const totalRowsCount = Math.max(1, Math.ceil(flightCapacity / seatsPerRow));
   const rows = Array.from({ length: totalRowsCount }, (_, i) => i + 1);
-  const occupiedSeats = ['1A', '2B', '3F', '5C', '7B', '9A', '12A'];
 
   // Destination & Layover Location Mapping
   const destinationAirport = airports?.find(a => a.code === selectedFlight?.destination);
@@ -299,7 +459,12 @@ export default function SeatReservationView({
         return;
       }
       if (assignedSeats.has(p.seat)) {
-        setFormError(`Seat ${p.seat} is assigned to multiple passengers. Each passenger must have a unique seat.`);
+        setFormError(`Seat ${p.seat} is assigned to multiple passengers in this booking. Each passenger must have a unique seat.`);
+        return;
+      }
+      if (occupiedSeats.includes(p.seat)) {
+        setOccupiedModalSeat(p.seat);
+        setFormError(`⚠️ Seat ${p.seat} is currently OCCUPIED on flight ${flightNum || ''}. Seats cannot be duplicated unless the previous ticket is cancelled and refunded.`);
         return;
       }
       assignedSeats.add(p.seat);
@@ -472,19 +637,31 @@ export default function SeatReservationView({
             </div>
           </div>
 
+          {/* Seat Map Error / Occupied Alert Banner */}
+          {formError && (
+            <div className="flex items-center gap-2.5 rounded-2xl border-2 border-red-300 bg-red-50 p-3.5 text-xs font-bold text-red-700 shadow-sm animate-pulse">
+              <AlertCircle className="h-5 w-5 shrink-0 text-red-600" />
+              <div className="flex-1 leading-snug">{formError}</div>
+            </div>
+          )}
+
           {/* Seat Status Legend */}
-          <div className="grid grid-cols-3 gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-center text-xs font-semibold">
+          <div className="grid grid-cols-4 gap-1.5 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-center text-xs font-semibold">
             <div className="flex items-center justify-center gap-1.5">
-              <div className="w-4 h-4 rounded bg-slate-100 border border-slate-300"></div>
-              <span>Available</span>
+              <div className="w-3.5 h-3.5 rounded bg-white border border-slate-300"></div>
+              <span className="text-[11px]">Available</span>
             </div>
             <div className="flex items-center justify-center gap-1.5">
-              <div className="w-4 h-4 rounded bg-blue-600 text-white shadow-sm"></div>
-              <span>Selected</span>
+              <div className="w-3.5 h-3.5 rounded bg-blue-600 text-white shadow-sm"></div>
+              <span className="text-[11px]">Selected</span>
             </div>
             <div className="flex items-center justify-center gap-1.5">
-              <div className="w-4 h-4 rounded bg-slate-300"></div>
-              <span>Occupied</span>
+              <div className="w-3.5 h-3.5 rounded bg-red-500 text-white flex items-center justify-center text-[9px] font-bold">✕</div>
+              <span className="text-[11px] text-red-600 font-bold">Occupied</span>
+            </div>
+            <div className="flex items-center justify-center gap-1.5">
+              <div className="w-3.5 h-3.5 rounded bg-slate-200 opacity-60"></div>
+              <span className="text-[11px] text-slate-500">Other Cabin</span>
             </div>
           </div>
 
@@ -547,21 +724,21 @@ export default function SeatReservationView({
                           <button
                             key={seatId}
                             type="button"
-                            disabled={isOccupied}
                             onClick={() => handleSelectSeat(seatId)}
-                            title={isOccupied ? `Seat ${seatId} Occupied` : isWrongCabin ? `Seat ${seatId} is outside your ${flightCabinClass} Class cabin` : `Select Seat ${seatId}`}
-                            className={`w-9 h-9 rounded-xl text-xs font-bold transition-all flex items-center justify-center ${isCurrentPassengerSeat
-                              ? 'bg-blue-600 text-white shadow-lg scale-105 border-2 border-blue-400 ring-2 ring-blue-300'
-                              : isSelectedByAny
-                                ? 'bg-indigo-500 text-white shadow'
-                                : isOccupied
-                                  ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                                  : isWrongCabin
-                                    ? 'bg-slate-100 text-slate-400 border border-slate-200 opacity-40 hover:opacity-75'
-                                    : 'bg-white text-slate-700 border border-slate-300 hover:border-blue-500 hover:bg-blue-50'
-                              }`}
+                            title={isOccupied ? `Seat ${seatId} is ALREADY OCCUPIED (Click to see alert)` : isWrongCabin ? `Seat ${seatId} is outside your ${flightCabinClass} Class cabin` : `Select Seat ${seatId}`}
+                            className={`w-9 h-9 rounded-xl text-xs font-bold transition-all flex items-center justify-center ${
+                              isOccupied
+                                ? '!bg-red-500 !text-white !border-2 !border-red-700 shadow-md font-black cursor-pointer hover:!bg-red-600 hover:scale-105 ring-2 ring-red-300'
+                                : isCurrentPassengerSeat
+                                  ? 'bg-blue-600 text-white shadow-lg scale-105 border-2 border-blue-400 ring-2 ring-blue-300'
+                                  : isSelectedByAny
+                                    ? 'bg-indigo-500 text-white shadow'
+                                    : isWrongCabin
+                                      ? 'bg-slate-100 text-slate-400 border border-slate-200 opacity-40 hover:opacity-75'
+                                      : 'bg-white text-slate-700 border border-slate-300 hover:border-blue-500 hover:bg-blue-50'
+                            }`}
                           >
-                            {seatId}
+                            {isOccupied ? '✕' : seatId}
                           </button>
                         );
                       })}
@@ -584,21 +761,21 @@ export default function SeatReservationView({
                           <button
                             key={seatId}
                             type="button"
-                            disabled={isOccupied}
                             onClick={() => handleSelectSeat(seatId)}
-                            title={isOccupied ? `Seat ${seatId} Occupied` : isWrongCabin ? `Seat ${seatId} is outside your ${flightCabinClass} Class cabin` : `Select Seat ${seatId}`}
-                            className={`w-9 h-9 rounded-xl text-xs font-bold transition-all flex items-center justify-center ${isCurrentPassengerSeat
-                              ? 'bg-blue-600 text-white shadow-lg scale-105 border-2 border-blue-400 ring-2 ring-blue-300'
-                              : isSelectedByAny
-                                ? 'bg-indigo-500 text-white shadow'
-                                : isOccupied
-                                  ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                                  : isWrongCabin
-                                    ? 'bg-slate-100 text-slate-400 border border-slate-200 opacity-40 hover:opacity-75'
-                                    : 'bg-white text-slate-700 border border-slate-300 hover:border-blue-500 hover:bg-blue-50'
-                              }`}
+                            title={isOccupied ? `Seat ${seatId} is ALREADY OCCUPIED (Click to see alert)` : isWrongCabin ? `Seat ${seatId} is outside your ${flightCabinClass} Class cabin` : `Select Seat ${seatId}`}
+                            className={`w-9 h-9 rounded-xl text-xs font-bold transition-all flex items-center justify-center ${
+                              isOccupied
+                                ? '!bg-red-500 !text-white !border-2 !border-red-700 shadow-md font-black cursor-pointer hover:!bg-red-600 hover:scale-105 ring-2 ring-red-300'
+                                : isCurrentPassengerSeat
+                                  ? 'bg-blue-600 text-white shadow-lg scale-105 border-2 border-blue-400 ring-2 ring-blue-300'
+                                  : isSelectedByAny
+                                    ? 'bg-indigo-500 text-white shadow'
+                                    : isWrongCabin
+                                      ? 'bg-slate-100 text-slate-400 border border-slate-200 opacity-40 hover:opacity-75'
+                                      : 'bg-white text-slate-700 border border-slate-300 hover:border-blue-500 hover:bg-blue-50'
+                            }`}
                           >
-                            {seatId}
+                            {isOccupied ? '✕' : seatId}
                           </button>
                         );
                       })}
@@ -690,15 +867,15 @@ export default function SeatReservationView({
               </div>
             </div>
 
-            {/* DOB & Passport */}
-            <div className="grid grid-cols-2 gap-3">
+            {/* DOB, Passport & Nationality */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Date of Birth</label>
                 <input
                   type="date"
                   value={activePassenger.dob}
                   onChange={(e) => updateActivePassenger({ dob: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                 />
               </div>
 
@@ -710,6 +887,17 @@ export default function SeatReservationView({
                   onChange={(e) => updateActivePassenger({ passport: e.target.value })}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs font-bold text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                   placeholder="e.g. N9849201"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Nationality *</label>
+                <input
+                  type="text"
+                  value={activePassenger.nationality || ''}
+                  onChange={(e) => updateActivePassenger({ nationality: e.target.value })}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs font-bold text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
+                  placeholder="e.g. Sri Lanka"
                 />
               </div>
             </div>
@@ -1124,6 +1312,34 @@ export default function SeatReservationView({
           }
         }}
       />
+
+      {/* Occupied Seat Alert Popup Modal */}
+      {occupiedModalSeat && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl border border-red-200 text-center space-y-4 animate-in fade-in zoom-in duration-200">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-red-100 text-red-600 border border-red-200 shadow-inner">
+              <AlertCircle className="h-8 w-8" />
+            </div>
+            <div>
+              <h3 className="text-lg font-black text-slate-900">Seat {occupiedModalSeat} Is Already Occupied!</h3>
+              <p className="mt-2 text-xs text-slate-600 leading-relaxed">
+                Seat <strong>{occupiedModalSeat}</strong> on flight <strong>{selectedFlight?.flightNumber || 'this flight'}</strong> has already been reserved and confirmed by another passenger.
+              </p>
+              <div className="mt-3 text-xs text-red-700 font-bold bg-red-50 p-3 rounded-2xl border border-red-200 flex items-center gap-2 text-left">
+                <span className="text-base">🔒</span>
+                <span>Seats cannot be duplicated or re-assigned unless the previous booking is cancelled and refunded.</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setOccupiedModalSeat(null)}
+              className="w-full rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 py-3.5 text-xs font-black text-white transition hover:from-blue-700 hover:to-indigo-700 shadow-lg shadow-blue-500/25"
+            >
+              Choose Another Free Seat
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -296,7 +296,7 @@ export default function CancellationRefundView({ currentRole, user, onOpenAuth, 
       console.warn('Backend refund submission fallback to local state:', err.message);
     }
 
-    // Mark reservation as CANCELLED in state
+    // Mark reservation as CANCELLED in state & release seat from local cache
     setReservations((prev) =>
       prev.map((r) =>
         r.pnr.toUpperCase() === selectedBooking.pnr.toUpperCase()
@@ -305,6 +305,15 @@ export default function CancellationRefundView({ currentRole, user, onOpenAuth, 
       )
     );
     setSelectedBooking((prev) => (prev ? { ...prev, status: 'CANCELLED' } : null));
+
+    // Release seat in cache for this flight
+    const flightNum = selectedBooking?.flightNumber;
+    if (flightNum) {
+      try {
+        localStorage.removeItem(`skyline_occupied_${flightNum}`);
+        window.dispatchEvent(new Event('skyline_seats_updated'));
+      } catch (e) {}
+    }
 
     setRefundList([newRefundItem, ...refundList]);
     setIsSubmitting(false);
@@ -324,6 +333,13 @@ export default function CancellationRefundView({ currentRole, user, onOpenAuth, 
       } catch (err) {
         console.warn('Backend refund status approval fallback:', err.message);
       }
+    }
+
+    if (item?.flightNumber) {
+      try {
+        localStorage.removeItem(`skyline_occupied_${item.flightNumber}`);
+        window.dispatchEvent(new Event('skyline_seats_updated'));
+      } catch (e) {}
     }
 
     setRefundList(

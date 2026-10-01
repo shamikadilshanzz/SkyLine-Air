@@ -1,18 +1,47 @@
+-- ============================================================================
 -- SkyLine Air - Web-Based Airline Ticket Reservation System
--- Database Schema Definition (SQL)
--- Module: SE2030 Software Engineering
--- Fully synchronized with H2 Console & JPA Domain Entities
+-- Database Schema Definition (SQL DDL)
+-- Module: IT2140 Database Design and Development / SE2030 Software Engineering
+-- Fully synchronized with H2 Console (MySQL Mode) & JPA Domain Entities
+-- ============================================================================
 
--- 1. Users Table (30 attributes)
+-- ============================================================================
+-- 1. Airports Table (Master Lookup - 4 attributes)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS airports (
+    airport_code VARCHAR(3) PRIMARY KEY,
+    airport_name VARCHAR(100) NOT NULL,
+    city VARCHAR(50) NOT NULL,
+    country VARCHAR(50) NOT NULL
+);
+
+-- ============================================================================
+-- 2. Aircraft Fleet Table (Master Fleet - 7 attributes)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS aircraft (
+    aircraft_id INT PRIMARY KEY AUTO_INCREMENT,
+    model VARCHAR(50) NOT NULL,
+    tail_number VARCHAR(20) UNIQUE NOT NULL,
+    economy_seats INT NOT NULL DEFAULT 150,
+    business_seats INT NOT NULL DEFAULT 30,
+    first_class_seats INT NOT NULL DEFAULT 12,
+    status VARCHAR(30) DEFAULT 'ACTIVE'
+);
+
+-- ============================================================================
+-- 3. Users Table (Superclass & Subtypes via Single-Table Strategy - 29 attributes)
+-- ISA Subtypes: Passenger, Ticketing Officer, Airline Admin, Hotel Manager
+-- Justification: Single-Table (Union) strategy enables unified authentication/login
+-- and avoids complex joins across common personal and contact attributes.
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS users (
     user_id INT PRIMARY KEY AUTO_INCREMENT,
-    full_name VARCHAR(100) NOT NULL,
     email VARCHAR(100) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     phone_number VARCHAR(20),
     title VARCHAR(10) DEFAULT 'Mr',
-    first_name VARCHAR(50),
-    last_name VARCHAR(50),
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
     dob VARCHAR(30),
     gender VARCHAR(20),
     nationality VARCHAR(50),
@@ -20,7 +49,7 @@ CREATE TABLE IF NOT EXISTS users (
     address VARCHAR(255),
     city VARCHAR(50),
     postal_code VARCHAR(20),
-    role VARCHAR(30) DEFAULT 'PASSENGER',
+    role VARCHAR(30) DEFAULT 'PASSENGER', -- Discriminator column for ISA hierarchy
     passport_number VARCHAR(30),
     passport_expiry VARCHAR(30),
     passport_issuing_country VARCHAR(50),
@@ -34,10 +63,13 @@ CREATE TABLE IF NOT EXISTS users (
     emergency_contact_relationship VARCHAR(50),
     emergency_contact_email VARCHAR(100),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
--- 2. Saved Payment Cards Table (10 attributes)
+-- ============================================================================
+-- 4. Saved Payment Cards Table (10 attributes)
+-- Foreign Key: user_id -> users(user_id)
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS user_cards (
     card_id INT PRIMARY KEY AUTO_INCREMENT,
     user_id INT NOT NULL,
@@ -48,29 +80,14 @@ CREATE TABLE IF NOT EXISTS user_cards (
     expiry VARCHAR(10) NOT NULL,
     cvv VARCHAR(4),
     is_default BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_user_cards_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
--- 3. Airports Table (4 attributes)
-CREATE TABLE IF NOT EXISTS airports (
-    airport_code VARCHAR(3) PRIMARY KEY,
-    airport_name VARCHAR(100) NOT NULL,
-    city VARCHAR(50) NOT NULL,
-    country VARCHAR(50) NOT NULL
-);
-
--- 4. Aircraft Fleet Table (7 attributes)
-CREATE TABLE IF NOT EXISTS aircraft (
-    aircraft_id INT PRIMARY KEY AUTO_INCREMENT,
-    model VARCHAR(50) NOT NULL,
-    tail_number VARCHAR(20) UNIQUE NOT NULL,
-    economy_seats INT NOT NULL DEFAULT 150,
-    business_seats INT NOT NULL DEFAULT 30,
-    first_class_seats INT NOT NULL DEFAULT 12,
-    status VARCHAR(30) DEFAULT 'ACTIVE'
-);
-
+-- ============================================================================
 -- 5. Flight Schedules Table (24 attributes)
+-- Foreign Keys: origin_code -> airports, destination_code -> airports, aircraft_id -> aircraft
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS flights (
     flight_id INT PRIMARY KEY AUTO_INCREMENT,
     flight_number VARCHAR(10) UNIQUE NOT NULL,
@@ -95,10 +112,38 @@ CREATE TABLE IF NOT EXISTS flights (
     total_seats INT DEFAULT 60,
     available_seats INT DEFAULT 45,
     status VARCHAR(30) DEFAULT 'ON_TIME',
-    image VARCHAR(255)
+    image VARCHAR(255),
+    CONSTRAINT fk_flights_origin FOREIGN KEY (origin_code) REFERENCES airports(airport_code),
+    CONSTRAINT fk_flights_destination FOREIGN KEY (destination_code) REFERENCES airports(airport_code),
+    CONSTRAINT fk_flights_aircraft FOREIGN KEY (aircraft_id) REFERENCES aircraft(aircraft_id) ON DELETE SET NULL
 );
 
--- 6. Reservations & Bookings Table (22 attributes)
+-- ============================================================================
+-- 6. Hotel Partners Table (12 attributes)
+-- Foreign Key: airport_code -> airports(airport_code)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS hotels (
+    hotel_id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    city VARCHAR(50) NOT NULL,
+    country VARCHAR(50) DEFAULT 'UAE',
+    airport_code VARCHAR(3) NOT NULL,
+    star_rating INT DEFAULT 4,
+    price_per_night DECIMAL(10, 2) NOT NULL,
+    available_rooms INT NOT NULL,
+    distance_km DOUBLE DEFAULT 1.0,
+    complimentary_threshold_hours INT DEFAULT 8,
+    shuttle_service BOOLEAN DEFAULT TRUE,
+    image VARCHAR(255),
+    amenities TEXT,
+    CONSTRAINT uq_hotels_name UNIQUE (name),
+    CONSTRAINT fk_hotels_airport FOREIGN KEY (airport_code) REFERENCES airports(airport_code)
+);
+
+-- ============================================================================
+-- 7. Reservations & Bookings Table (29 attributes)
+-- Foreign Keys: user_id -> users, flight_id -> flights, hotel_id -> hotels
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS reservations (
     reservation_id INT PRIMARY KEY AUTO_INCREMENT,
     pnr_code VARCHAR(10) UNIQUE NOT NULL,
@@ -128,13 +173,22 @@ CREATE TABLE IF NOT EXISTS reservations (
     hotel_country VARCHAR(50),
     hotel_room_type VARCHAR(50),
     hotel_price DECIMAL(10, 2) DEFAULT 0.00,
-    hotel_voucher_code VARCHAR(30)
+    hotel_voucher_code VARCHAR(30),
+    CONSTRAINT fk_reservations_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL,
+    CONSTRAINT fk_reservations_flight FOREIGN KEY (flight_id) REFERENCES flights(flight_id) ON DELETE SET NULL,
+    CONSTRAINT fk_reservations_hotel FOREIGN KEY (hotel_id) REFERENCES hotels(hotel_id) ON DELETE SET NULL
 );
 
--- 7. Passenger Details Table (12 attributes)
+-- ============================================================================
+-- 8. Passenger Details Table (Weak Entity - 12 attributes)
+-- Weak Entity dependent on 'reservations' (Identifying Relationship)
+-- Strong/Parent Entity: reservations (reservation_id)
+-- Composite Primary Key: (reservation_id, passenger_id)
+-- Foreign Key: reservation_id -> reservations(reservation_id)
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS passengers (
-    passenger_id INT PRIMARY KEY AUTO_INCREMENT,
-    reservation_id INT,
+    reservation_id INT NOT NULL,
+    passenger_id INT NOT NULL,
     title VARCHAR(10),
     first_name VARCHAR(50) NOT NULL,
     last_name VARCHAR(50) NOT NULL,
@@ -144,21 +198,30 @@ CREATE TABLE IF NOT EXISTS passengers (
     seat_number VARCHAR(10),
     cabin_class VARCHAR(30) DEFAULT 'ECONOMY',
     meal_preference VARCHAR(100) DEFAULT 'Standard Gourmet',
-    extra_baggage_kg INT DEFAULT 0
+    extra_baggage_kg INT DEFAULT 0,
+    PRIMARY KEY (reservation_id, passenger_id),
+    CONSTRAINT fk_passengers_reservation FOREIGN KEY (reservation_id) REFERENCES reservations(reservation_id) ON DELETE CASCADE
 );
 
--- 8. Payment Transactions Table (7 attributes)
+-- ============================================================================
+-- 9. Payment Transactions Table (7 attributes)
+-- Foreign Key: reservation_id -> reservations(reservation_id)
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS payments (
     payment_id INT PRIMARY KEY AUTO_INCREMENT,
-    reservation_id INT,
+    reservation_id INT NOT NULL,
     transaction_reference VARCHAR(50) UNIQUE NOT NULL,
     payment_method VARCHAR(30) NOT NULL,
     amount DECIMAL(10, 2) NOT NULL,
     payment_status VARCHAR(30) DEFAULT 'SUCCESS',
-    payment_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    payment_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_payments_reservation FOREIGN KEY (reservation_id) REFERENCES reservations(reservation_id) ON DELETE CASCADE
 );
 
--- 9. Ticket Cancellations & Refunds Table (14 attributes)
+-- ============================================================================
+-- 10. Ticket Cancellations & Refunds Table (14 attributes)
+-- Foreign Key: reservation_id -> reservations(reservation_id)
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS refund_requests (
     refund_id INT PRIMARY KEY AUTO_INCREMENT,
     refund_reference VARCHAR(20) UNIQUE NOT NULL,
@@ -173,26 +236,14 @@ CREATE TABLE IF NOT EXISTS refund_requests (
     reason TEXT,
     status VARCHAR(30) DEFAULT 'REQUESTED',
     requested_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    processed_at DATETIME
+    processed_at DATETIME,
+    CONSTRAINT fk_refunds_reservation FOREIGN KEY (reservation_id) REFERENCES reservations(reservation_id) ON DELETE SET NULL
 );
 
--- 10. Hotel Partners Table (11 attributes)
-CREATE TABLE IF NOT EXISTS hotels (
-    hotel_id INT PRIMARY KEY AUTO_INCREMENT,
-    name VARCHAR(100) NOT NULL,
-    city VARCHAR(50) NOT NULL,
-    country VARCHAR(50) DEFAULT 'UAE',
-    airport_code VARCHAR(3) NOT NULL,
-    star_rating INT DEFAULT 4,
-    price_per_night DECIMAL(10, 2) NOT NULL,
-    available_rooms INT NOT NULL,
-    distance_km DOUBLE DEFAULT 1.0,
-    complimentary_threshold_hours INT DEFAULT 8,
-    shuttle_service BOOLEAN DEFAULT TRUE,
-    image VARCHAR(255)
-);
-
--- 11. Hotel Bookings Table (13 attributes)
+-- ============================================================================
+-- 11. Hotel Bookings Table (16 attributes)
+-- Foreign Keys: hotel_id -> hotels, user_id -> users, reservation_id -> reservations
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS hotel_bookings (
     hotel_booking_id INT PRIMARY KEY AUTO_INCREMENT,
     hotel_id INT,
@@ -209,13 +260,19 @@ CREATE TABLE IF NOT EXISTS hotel_bookings (
     is_complimentary BOOLEAN DEFAULT FALSE,
     amount DECIMAL(10, 2) NOT NULL,
     booking_status VARCHAR(30) DEFAULT 'CONFIRMED',
-    created_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_hotel_bookings_hotel FOREIGN KEY (hotel_id) REFERENCES hotels(hotel_id) ON DELETE SET NULL,
+    CONSTRAINT fk_hotel_bookings_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL,
+    CONSTRAINT fk_hotel_bookings_reservation FOREIGN KEY (reservation_id) REFERENCES reservations(reservation_id) ON DELETE SET NULL
 );
 
+-- ============================================================================
 -- 12. Flight Price Alerts & Saved Searches Table (12 attributes)
+-- Foreign Keys: user_id -> users, origin_code -> airports, destination_code -> airports
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS price_alerts (
     alert_id INT PRIMARY KEY AUTO_INCREMENT,
-    user_id INT,
+    user_id INT NOT NULL,
     user_email VARCHAR(100) NOT NULL,
     origin_code VARCHAR(3) NOT NULL,
     origin_city VARCHAR(50),
@@ -225,5 +282,8 @@ CREATE TABLE IF NOT EXISTS price_alerts (
     cabin_class VARCHAR(20) DEFAULT 'ECONOMY',
     frequency VARCHAR(20) DEFAULT 'INSTANT',
     status VARCHAR(20) DEFAULT 'ACTIVE',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_alerts_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    CONSTRAINT fk_alerts_origin FOREIGN KEY (origin_code) REFERENCES airports(airport_code),
+    CONSTRAINT fk_alerts_destination FOREIGN KEY (destination_code) REFERENCES airports(airport_code)
 );

@@ -7,7 +7,9 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 
 @Entity
-@Table(name = "hotels")
+@Table(name = "hotels", uniqueConstraints = {
+    @UniqueConstraint(name = "uk_hotels_name", columnNames = {"name"})
+})
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -16,7 +18,7 @@ public class Hotel {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long hotelId;
 
-    @Column(nullable = false)
+    @Column(nullable = false, unique = true)
     private String name;
 
     @Column(nullable = false)

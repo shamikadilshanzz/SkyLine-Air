@@ -73,8 +73,18 @@ public class UserController {
             user.setPasswordHash("default123");
         }
 
-        if (user.getFullName() == null || user.getFullName().trim().isEmpty()) {
-            user.setFullName((user.getFirstName() + " " + user.getLastName()).trim());
+        if (user.getFirstName() == null || user.getFirstName().trim().isEmpty()) {
+            if (user.getFullName() != null && !user.getFullName().trim().isEmpty()) {
+                String[] parts = user.getFullName().trim().split("\\s+", 2);
+                user.setFirstName(parts[0]);
+                user.setLastName(parts.length > 1 ? parts[1] : parts[0]);
+            } else {
+                user.setFirstName("Alex");
+                user.setLastName("Morgan");
+            }
+        }
+        if (user.getLastName() == null || user.getLastName().trim().isEmpty()) {
+            user.setLastName("Morgan");
         }
 
         user.setCreatedAt(LocalDateTime.now());
@@ -87,11 +97,11 @@ public class UserController {
     @PutMapping("/{id}")
     public ResponseEntity<?> updateUser(@PathVariable Long id, @RequestBody User updatedUser) {
         return userRepository.findById(id).map(existingUser -> {
-            if (updatedUser.getFullName() != null) existingUser.setFullName(updatedUser.getFullName());
-            if (updatedUser.getPhoneNumber() != null) existingUser.setPhoneNumber(updatedUser.getPhoneNumber());
-            if (updatedUser.getTitle() != null) existingUser.setTitle(updatedUser.getTitle());
             if (updatedUser.getFirstName() != null) existingUser.setFirstName(updatedUser.getFirstName());
             if (updatedUser.getLastName() != null) existingUser.setLastName(updatedUser.getLastName());
+            if (updatedUser.getFullName() != null && (updatedUser.getFirstName() == null || updatedUser.getLastName() == null)) {
+                existingUser.setFullName(updatedUser.getFullName());
+            }
             if (updatedUser.getDob() != null) existingUser.setDob(updatedUser.getDob());
             if (updatedUser.getGender() != null) existingUser.setGender(updatedUser.getGender());
             if (updatedUser.getNationality() != null) existingUser.setNationality(updatedUser.getNationality());

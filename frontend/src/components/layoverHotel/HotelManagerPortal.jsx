@@ -113,7 +113,7 @@ function payloadFromForm(form) {
   };
 }
 
-function validateHotelForm(form) {
+function validateHotelForm(form, existingHotels = [], currentEditingId = null) {
   const errors = {};
   const name = form.name.trim();
   const city = form.city.trim();
@@ -121,7 +121,22 @@ function validateHotelForm(form) {
   const airportCode = form.airportCode.trim().toUpperCase();
   const image = form.image.trim();
 
-  if (name.length < 2) errors.name = 'Hotel name is required (at least 2 characters)';
+  if (name.length < 2) {
+    errors.name = 'Hotel name is required (at least 2 characters)';
+  } else {
+    const isDuplicate = existingHotels.some((h) => {
+      const hId = h.rawId ?? h.hotelId ?? (typeof h.id === 'number' ? h.id : parseInt(String(h.id).replace(/\D/g, ''), 10));
+      const targetId = currentEditingId !== null && currentEditingId !== undefined
+        ? (typeof currentEditingId === 'number' ? currentEditingId : parseInt(String(currentEditingId).replace(/\D/g, ''), 10))
+        : null;
+      const isSameItem = targetId && (hId === targetId || h.id === targetId || h.rawId === targetId);
+      return !isSameItem && String(h.name || '').trim().toLowerCase() === name.toLowerCase();
+    });
+    if (isDuplicate) {
+      errors.name = `A hotel named "${name}" already exists. Please enter a unique hotel name.`;
+    }
+  }
+
   if (city.length < 2) errors.city = 'City is required (at least 2 characters)';
   if (country.length < 2) errors.country = 'Country is required (at least 2 characters)';
   if (!/^[A-Z]{3}$/.test(airportCode)) errors.airportCode = 'Airport code must be exactly 3 letters (e.g. DXB)';
@@ -306,7 +321,8 @@ export default function HotelManagerPortal({ hotels = [], onHotelsUpdated, onBoo
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const nextErrors = validateHotelForm(form);
+    const currentId = editingHotel?.rawId || editingHotel?.id;
+    const nextErrors = validateHotelForm(form, hotels, currentId);
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
       showNotification('error', Object.values(nextErrors)[0]);
@@ -329,7 +345,11 @@ export default function HotelManagerPortal({ hotels = [], onHotelsUpdated, onBoo
       }
       closeModal();
     } catch (err) {
-      showNotification('error', err.message || 'Could not save hotel. Please try again.');
+      const msg = err.message || 'Could not save hotel. Please try again.';
+      if (msg.toLowerCase().includes('already exists') || msg.toLowerCase().includes('duplicate')) {
+        setErrors((prev) => ({ ...prev, name: msg }));
+      }
+      showNotification('error', msg);
     } finally {
       setSaving(false);
     }
