@@ -310,6 +310,21 @@ export default function App() {
         selectedClass: cabin
       }
     });
+    // Reduce available seats count for this flight in frontend state
+    const bookedPassengers = confirmedData.passengers?.length || confirmedData.passengerCount || 1;
+    const flightNum = confirmedData.flight?.flightNumber;
+    if (flightNum) {
+      setFlights(prev => prev.map(f => {
+        if (f.flightNumber === flightNum) {
+          return {
+            ...f,
+            availableSeats: Math.max(0, (f.availableSeats || 45) - bookedPassengers)
+          };
+        }
+        return f;
+      }));
+    }
+
     // Add automated SMS dispatch alert
     const newNotif = {
       id: Date.now(),
@@ -371,6 +386,7 @@ export default function App() {
           <SeatReservationView
             selectedFlight={selectedFlight}
             currentRole={currentRole}
+            user={user}
             airports={airports}
             onConfirmReservation={handleConfirmReservation}
             onBackToResults={() => setActiveTab('results')}

@@ -17,9 +17,11 @@ import java.util.Random;
 public class ReservationController {
 
     private final ReservationRepository reservationRepository;
+    private final com.skylineair.repository.FlightRepository flightRepository;
 
-    public ReservationController(ReservationRepository reservationRepository) {
+    public ReservationController(ReservationRepository reservationRepository, com.skylineair.repository.FlightRepository flightRepository) {
         this.reservationRepository = reservationRepository;
+        this.flightRepository = flightRepository;
     }
 
     @jakarta.annotation.PostConstruct
@@ -113,6 +115,41 @@ public class ReservationController {
         return list;
     }
 
+    @GetMapping("/occupied-seats")
+    public ResponseEntity<List<String>> getOccupiedSeats(
+            @RequestParam(required = false) String flightNumber,
+            @RequestParam(required = false) Long flightId,
+            @RequestParam(required = false) String excludePnr) {
+
+        List<Reservation> flightReservations;
+        if (flightNumber != null && !flightNumber.trim().isEmpty()) {
+            flightReservations = reservationRepository.findByFlightNumber(flightNumber.trim());
+        } else if (flightId != null) {
+            flightReservations = reservationRepository.findByFlightId(flightId);
+        } else {
+            flightReservations = reservationRepository.findAll();
+        }
+
+        java.util.Set<String> occupied = new java.util.HashSet<>();
+        for (Reservation r : flightReservations) {
+            // Cancelled bookings release their seats back to inventory
+            if ("CANCELLED".equalsIgnoreCase(r.getBookingStatus())) {
+                continue;
+            }
+            if (excludePnr != null && excludePnr.equalsIgnoreCase(r.getPnrCode())) {
+                continue;
+            }
+            if (r.getPassengers() != null) {
+                for (com.skylineair.model.Passenger p : r.getPassengers()) {
+                    if (p.getSeatNumber() != null && !p.getSeatNumber().trim().isEmpty()) {
+                        occupied.add(p.getSeatNumber().trim().toUpperCase());
+                    }
+                }
+            }
+        }
+        return ResponseEntity.ok(new java.util.ArrayList<>(occupied));
+    }
+
     @PostMapping
     public ResponseEntity<?> createReservation(@RequestBody Reservation reservation) {
         if (reservation.getPnrCode() == null || reservation.getPnrCode().isEmpty()) {
@@ -131,7 +168,68 @@ public class ReservationController {
             }
         }
 
+        // Validate intra-booking duplicate seats (prevent 2 passengers having same seat in same booking)
+        if (reservation.getPassengers() != null && reservation.getPassengers().size() > 1) {
+            java.util.Set<String> seenInBooking = new java.util.HashSet<>();
+            for (com.skylineair.model.Passenger p : reservation.getPassengers()) {
+                if (p.getSeatNumber() != null && !p.getSeatNumber().trim().isEmpty()) {
+                    String seatUpper = p.getSeatNumber().trim().toUpperCase();
+                    if (!seenInBooking.add(seatUpper)) {
+                        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
+                                "message", "Duplicate seat assignment: Multiple passengers in this booking cannot select the same seat (" + seatUpper + ")."
+                        ));
+                    }
+                }
+            }
+        }
+
+        // Validate seat duplication against other active reservations on the same flight
+        if (reservation.getFlightNumber() != null && !reservation.getFlightNumber().trim().isEmpty() && reservation.getPassengers() != null) {
+            List<Reservation> existingFlightRes = reservationRepository.findByFlightNumber(reservation.getFlightNumber().trim());
+            for (Reservation existing : existingFlightRes) {
+                // Cancelled tickets release their seats
+                if ("CANCELLED".equalsIgnoreCase(existing.getBookingStatus())) {
+                    continue;
+                }
+                if (existing.getPassengers() != null) {
+                    for (com.skylineair.model.Passenger ep : existing.getPassengers()) {
+                        if (ep.getSeatNumber() != null && !ep.getSeatNumber().trim().isEmpty()) {
+                            String existingSeat = ep.getSeatNumber().trim().toUpperCase();
+                            for (com.skylineair.model.Passenger newP : reservation.getPassengers()) {
+                                if (newP.getSeatNumber() != null && existingSeat.equalsIgnoreCase(newP.getSeatNumber().trim())) {
+                                    return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                                            "message", "Seat " + existingSeat + " is already occupied on flight " + reservation.getFlightNumber() + ". Seats cannot be re-assigned unless the previous ticket is cancelled and refunded.",
+                                            "occupiedSeat", existingSeat
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         Reservation saved = reservationRepository.save(reservation);
+
+        // Reduce available seats count on the flight
+        int bookedPassengerCount = (reservation.getPassengers() != null && !reservation.getPassengers().isEmpty())
+                ? reservation.getPassengers().size()
+                : 1;
+
+        if (reservation.getFlightNumber() != null && !reservation.getFlightNumber().trim().isEmpty()) {
+            flightRepository.findByFlightNumber(reservation.getFlightNumber().trim()).ifPresent(flight -> {
+                int currentAvailable = flight.getAvailableSeats() != null ? flight.getAvailableSeats() : (flight.getTotalSeats() != null ? flight.getTotalSeats() : 60);
+                flight.setAvailableSeats(Math.max(0, currentAvailable - bookedPassengerCount));
+                flightRepository.save(flight);
+            });
+        } else if (reservation.getFlightId() != null) {
+            flightRepository.findById(reservation.getFlightId()).ifPresent(flight -> {
+                int currentAvailable = flight.getAvailableSeats() != null ? flight.getAvailableSeats() : (flight.getTotalSeats() != null ? flight.getTotalSeats() : 60);
+                flight.setAvailableSeats(Math.max(0, currentAvailable - bookedPassengerCount));
+                flightRepository.save(flight);
+            });
+        }
+
         return ResponseEntity.status(HttpStatus.CREATED).body(saved);
     }
 
@@ -189,12 +287,15 @@ public class ReservationController {
                     for (int i = 0; i < Math.min(existing.getPassengers().size(), pList.size()); i++) {
                         com.skylineair.model.Passenger p = existing.getPassengers().get(i);
                         Map<String, Object> pMap = pList.get(i);
+                        if (pMap.containsKey("title")) p.setTitle((String) pMap.get("title"));
                         if (pMap.containsKey("firstName")) p.setFirstName((String) pMap.get("firstName"));
                         if (pMap.containsKey("lastName")) p.setLastName((String) pMap.get("lastName"));
+                        if (pMap.containsKey("dob")) p.setDob((String) pMap.get("dob"));
                         if (pMap.containsKey("seatNumber")) p.setSeatNumber((String) pMap.get("seatNumber"));
                         if (pMap.containsKey("seat")) p.setSeatNumber((String) pMap.get("seat"));
                         if (pMap.containsKey("passportNumber")) p.setPassportNumber((String) pMap.get("passportNumber"));
                         if (pMap.containsKey("passport")) p.setPassportNumber((String) pMap.get("passport"));
+                        if (pMap.containsKey("nationality")) p.setNationality((String) pMap.get("nationality"));
                         if (pMap.containsKey("mealPreference")) p.setMealPreference((String) pMap.get("mealPreference"));
                         if (pMap.containsKey("meal")) p.setMealPreference((String) pMap.get("meal"));
                         if (pMap.containsKey("extraBaggageKg")) {
@@ -264,12 +365,15 @@ public class ReservationController {
                     for (int i = 0; i < Math.min(existing.getPassengers().size(), pList.size()); i++) {
                         com.skylineair.model.Passenger p = existing.getPassengers().get(i);
                         Map<String, Object> pMap = pList.get(i);
+                        if (pMap.containsKey("title")) p.setTitle((String) pMap.get("title"));
                         if (pMap.containsKey("firstName")) p.setFirstName((String) pMap.get("firstName"));
                         if (pMap.containsKey("lastName")) p.setLastName((String) pMap.get("lastName"));
+                        if (pMap.containsKey("dob")) p.setDob((String) pMap.get("dob"));
                         if (pMap.containsKey("seatNumber")) p.setSeatNumber((String) pMap.get("seatNumber"));
                         if (pMap.containsKey("seat")) p.setSeatNumber((String) pMap.get("seat"));
                         if (pMap.containsKey("passportNumber")) p.setPassportNumber((String) pMap.get("passportNumber"));
                         if (pMap.containsKey("passport")) p.setPassportNumber((String) pMap.get("passport"));
+                        if (pMap.containsKey("nationality")) p.setNationality((String) pMap.get("nationality"));
                         if (pMap.containsKey("mealPreference")) p.setMealPreference((String) pMap.get("mealPreference"));
                         if (pMap.containsKey("meal")) p.setMealPreference((String) pMap.get("meal"));
                         if (pMap.containsKey("extraBaggageKg")) {

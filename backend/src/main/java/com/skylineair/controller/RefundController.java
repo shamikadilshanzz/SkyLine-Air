@@ -18,10 +18,14 @@ public class RefundController {
 
     private final RefundRequestRepository refundRequestRepository;
     private final com.skylineair.repository.ReservationRepository reservationRepository;
+    private final com.skylineair.repository.FlightRepository flightRepository;
 
-    public RefundController(RefundRequestRepository refundRequestRepository, com.skylineair.repository.ReservationRepository reservationRepository) {
+    public RefundController(RefundRequestRepository refundRequestRepository,
+                            com.skylineair.repository.ReservationRepository reservationRepository,
+                            com.skylineair.repository.FlightRepository flightRepository) {
         this.refundRequestRepository = refundRequestRepository;
         this.reservationRepository = reservationRepository;
+        this.flightRepository = flightRepository;
     }
 
     @GetMapping
@@ -61,11 +65,28 @@ public class RefundController {
             refundRequest.setStatus("UNDER_REVIEW");
         }
 
-        // Update corresponding reservation booking status to CANCELLED
+        // Update corresponding reservation booking status to CANCELLED and restore available seats
         if (refundRequest.getPnr() != null && !refundRequest.getPnr().trim().isEmpty()) {
             reservationRepository.findByPnrCode(refundRequest.getPnr().trim()).ifPresent(res -> {
                 res.setBookingStatus("CANCELLED");
                 reservationRepository.save(res);
+
+                int passengerCount = (res.getPassengers() != null && !res.getPassengers().isEmpty()) ? res.getPassengers().size() : 1;
+                if (res.getFlightNumber() != null && !res.getFlightNumber().trim().isEmpty()) {
+                    flightRepository.findByFlightNumber(res.getFlightNumber().trim()).ifPresent(f -> {
+                        int total = f.getTotalSeats() != null ? f.getTotalSeats() : 60;
+                        int curr = f.getAvailableSeats() != null ? f.getAvailableSeats() : 0;
+                        f.setAvailableSeats(Math.min(total, curr + passengerCount));
+                        flightRepository.save(f);
+                    });
+                } else if (res.getFlightId() != null) {
+                    flightRepository.findById(res.getFlightId()).ifPresent(f -> {
+                        int total = f.getTotalSeats() != null ? f.getTotalSeats() : 60;
+                        int curr = f.getAvailableSeats() != null ? f.getAvailableSeats() : 0;
+                        f.setAvailableSeats(Math.min(total, curr + passengerCount));
+                        flightRepository.save(f);
+                    });
+                }
             });
         }
 

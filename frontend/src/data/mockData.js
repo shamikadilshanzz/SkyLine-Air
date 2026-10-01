@@ -307,17 +307,17 @@ export const DEFAULT_USER_PROFILE = {
   phone: '+1 555-0192',
   dob: '1992-05-14',
   gender: 'Male',
-  nationality: 'Sri Lanka',
-  country: 'Sri Lanka',
-  address: '45 Galle Road, Suite 402',
-  city: 'Colombo',
-  postalCode: '00300',
+  nationality: 'USA',
+  country: 'USA',
+  address: '120 Broadway, Suite 1400',
+  city: 'New York',
+  postalCode: '10005',
   role: 'PASSENGER',
   
   // Travel Documents
   passportNumber: 'N9849201',
   passportExpiry: '2031-10-15',
-  passportIssuingCountry: 'Sri Lanka',
+  passportIssuingCountry: 'USA',
   tsaPreCheckNumber: 'KTN-9820149',
 
   // Loyalty & Rewards

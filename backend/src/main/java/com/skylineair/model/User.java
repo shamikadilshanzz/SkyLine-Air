@@ -16,9 +16,6 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long userId;
 
-    @Column(nullable = false)
-    private String fullName;
-
     @Column(nullable = false, unique = true)
     private String email;
 
@@ -26,9 +23,14 @@ public class User {
     private String passwordHash;
 
     private String phoneNumber;
-    private String title;
+    private String title = "Mr";
+
+    @Column(nullable = false)
     private String firstName;
+
+    @Column(nullable = false)
     private String lastName;
+
     private String dob;
     private String gender;
     private String nationality;
@@ -62,4 +64,30 @@ public class User {
 
     private LocalDateTime createdAt = LocalDateTime.now();
     private LocalDateTime updatedAt = LocalDateTime.now();
+
+    /**
+     * Composite Attribute: Full Name is dynamically derived from first_name and last_name.
+     * Marked as @Transient so it is not stored as a redundant column in the relational database.
+     */
+    @Transient
+    public String getFullName() {
+        if (firstName != null && lastName != null && !firstName.trim().isEmpty() && !lastName.trim().isEmpty()) {
+            return (firstName.trim() + " " + lastName.trim()).trim();
+        }
+        if (firstName != null && !firstName.trim().isEmpty()) return firstName.trim();
+        if (lastName != null && !lastName.trim().isEmpty()) return lastName.trim();
+        return "";
+    }
+
+    public void setFullName(String fullName) {
+        if (fullName != null && !fullName.trim().isEmpty()) {
+            String[] parts = fullName.trim().split("\\s+", 2);
+            if (this.firstName == null || this.firstName.trim().isEmpty()) {
+                this.firstName = parts[0];
+            }
+            if ((this.lastName == null || this.lastName.trim().isEmpty()) && parts.length > 1) {
+                this.lastName = parts[1];
+            }
+        }
+    }
 }

@@ -59,6 +59,13 @@ public class HotelController {
         if (error != null) {
             return ResponseEntity.badRequest().body(Map.of("message", error));
         }
+
+        String trimmedName = hotel.getName().trim();
+        if (hotelRepository.existsByNameIgnoreCase(trimmedName)) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("message", "A hotel with the name '" + trimmedName + "' already exists in the database. Please use a unique hotel name."));
+        }
+
         applyDefaults(hotel);
         Hotel saved = hotelRepository.save(hotel);
         return ResponseEntity.status(HttpStatus.CREATED).body(saved);
@@ -69,6 +76,14 @@ public class HotelController {
         String error = validateHotel(updated, false);
         if (error != null) {
             return ResponseEntity.badRequest().body(Map.of("message", error));
+        }
+
+        if (updated.getName() != null) {
+            String trimmedName = updated.getName().trim();
+            if (hotelRepository.existsByNameIgnoreCaseAndHotelIdNot(trimmedName, id)) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(Map.of("message", "Another hotel with the name '" + trimmedName + "' already exists in the database. Please use a unique hotel name."));
+            }
         }
 
         return hotelRepository.findById(id)

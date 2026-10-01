@@ -232,6 +232,15 @@ export async function createReservationApi(reservationData) {
   });
 }
 
+export async function fetchOccupiedSeatsApi(flightNumber, flightId, excludePnr) {
+  const params = new URLSearchParams();
+  if (flightNumber) params.append('flightNumber', flightNumber);
+  if (flightId) params.append('flightId', flightId);
+  if (excludePnr) params.append('excludePnr', excludePnr);
+  const query = params.toString() ? `?${params.toString()}` : '';
+  return await fetchApi(`/reservations/occupied-seats${query}`);
+}
+
 export async function fetchReservationsApi() {
   return await fetchApi('/reservations');
 }

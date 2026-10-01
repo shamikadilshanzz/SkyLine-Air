@@ -79,6 +79,13 @@ public class DataInitializer implements CommandLineRunner {
             passenger.setTitle("Mr");
             passenger.setFirstName("Alex");
             passenger.setLastName("Morgan");
+            passenger.setNationality("USA");
+            passenger.setCountry("USA");
+            passenger.setCity("New York");
+            passenger.setAddress("120 Broadway, Suite 1400");
+            passenger.setPostalCode("10005");
+            passenger.setPassportNumber("N9849201");
+            passenger.setPassportIssuingCountry("USA");
             passenger.setLoyaltyTier("Gold VIP");
             passenger.setLoyaltyPoints(1450);
             passenger.setFrequentFlyerNumber("SL-8849201");
@@ -90,8 +97,16 @@ public class DataInitializer implements CommandLineRunner {
             officer.setPasswordHash("officer123");
             officer.setPhoneNumber("+94 77 123 4567");
             officer.setRole("TICKETING_OFFICER");
+            officer.setTitle("Ms");
             officer.setFirstName("Samira");
             officer.setLastName("Khan");
+            officer.setNationality("Sri Lanka");
+            officer.setCountry("Sri Lanka");
+            officer.setCity("Colombo");
+            officer.setAddress("45 Galle Road");
+            officer.setPostalCode("00300");
+            officer.setPassportNumber("N8829102");
+            officer.setPassportIssuingCountry("Sri Lanka");
             userRepository.save(officer);
 
             User admin = new User();
@@ -100,8 +115,16 @@ public class DataInitializer implements CommandLineRunner {
             admin.setPasswordHash("admin123");
             admin.setPhoneNumber("+1 800-SKY-ADMIN");
             admin.setRole("ADMIN");
+            admin.setTitle("Mr");
             admin.setFirstName("David");
             admin.setLastName("Vance");
+            admin.setNationality("USA");
+            admin.setCountry("USA");
+            admin.setCity("Chicago");
+            admin.setAddress("300 N Michigan Ave");
+            admin.setPostalCode("60601");
+            admin.setPassportNumber("N1192842");
+            admin.setPassportIssuingCountry("USA");
             userRepository.save(admin);
 
             User hotelManager = new User();
@@ -110,8 +133,16 @@ public class DataInitializer implements CommandLineRunner {
             hotelManager.setPasswordHash("hotel123");
             hotelManager.setPhoneNumber("+971 4 888 9999");
             hotelManager.setRole("HOTEL_MANAGER");
+            hotelManager.setTitle("Ms");
             hotelManager.setFirstName("Elena");
             hotelManager.setLastName("Rostova");
+            hotelManager.setNationality("UAE");
+            hotelManager.setCountry("UAE");
+            hotelManager.setCity("Dubai");
+            hotelManager.setAddress("Downtown Sheikh Zayed Rd");
+            hotelManager.setPostalCode("00000");
+            hotelManager.setPassportNumber("N4481029");
+            hotelManager.setPassportIssuingCountry("UAE");
             userRepository.save(hotelManager);
 
             User alex = new User();
@@ -120,8 +151,19 @@ public class DataInitializer implements CommandLineRunner {
             alex.setPasswordHash("passenger123");
             alex.setPhoneNumber("+1 555-0192");
             alex.setRole("PASSENGER");
+            alex.setTitle("Mr");
             alex.setFirstName("Alex");
             alex.setLastName("Morgan");
+            alex.setNationality("USA");
+            alex.setCountry("USA");
+            alex.setCity("New York");
+            alex.setAddress("120 Broadway, Suite 1400");
+            alex.setPostalCode("10005");
+            alex.setPassportNumber("N9849201");
+            alex.setPassportIssuingCountry("USA");
+            alex.setLoyaltyTier("Gold VIP");
+            alex.setLoyaltyPoints(1450);
+            alex.setFrequentFlyerNumber("SL-8849201");
             userRepository.save(alex);
         }
 
@@ -255,6 +297,7 @@ public class DataInitializer implements CommandLineRunner {
             h1.setDistanceKm(1.2);
             h1.setShuttleService(true);
             h1.setImage("https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80");
+            h1.setAmenities("Free Shuttle 24/7, Buffet Breakfast, Rooftop Pool, Executive Lounge, High-Speed Wi-Fi");
             hotelRepository.save(h1);
 
             Hotel h2 = new Hotel();
@@ -269,6 +312,7 @@ public class DataInitializer implements CommandLineRunner {
             h2.setDistanceKm(0.5);
             h2.setShuttleService(true);
             h2.setImage("https://images.unsplash.com/photo-1582719508461-905c673771fd?auto=format&fit=crop&w=800&q=80");
+            h2.setAmenities("Direct Terminal Access, Nap Pods, Fitness Center, Free Breakfast, Express Check-In");
             hotelRepository.save(h2);
 
             Hotel h3 = new Hotel();
@@ -283,6 +327,7 @@ public class DataInitializer implements CommandLineRunner {
             h3.setDistanceKm(1.5);
             h3.setShuttleService(true);
             h3.setImage("https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=800&q=80");
+            h3.setAmenities("Free 24/7 Heathrow Express Shuttle, British Gourmet Breakfast, Spa & Heated Pool, High-Speed Wi-Fi");
             hotelRepository.save(h3);
 
             Hotel h4 = new Hotel();
@@ -297,6 +342,7 @@ public class DataInitializer implements CommandLineRunner {
             h4.setDistanceKm(0.2);
             h4.setShuttleService(true);
             h4.setImage("https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?auto=format&fit=crop&w=800&q=80");
+            h4.setAmenities("Runway-View Rooftop Pool, Direct AirTrain Access, 24/7 Dining, Ultra-Quiet Rooms");
             hotelRepository.save(h4);
 
             Hotel h5 = new Hotel();
@@ -311,6 +357,7 @@ public class DataInitializer implements CommandLineRunner {
             h5.setDistanceKm(0.8);
             h5.setShuttleService(true);
             h5.setImage("https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=800&q=80");
+            h5.setAmenities("Onsen Natural Hot Spring, Airport Shuttle, Traditional Bento Breakfast, Quiet Sleep Pods");
             hotelRepository.save(h5);
 
             Hotel h6 = new Hotel();
@@ -325,6 +372,7 @@ public class DataInitializer implements CommandLineRunner {
             h6.setDistanceKm(1.0);
             h6.setShuttleService(true);
             h6.setImage("https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?auto=format&fit=crop&w=800&q=80");
+            h6.setAmenities("Complimentary Airport Transfer, Ceylon Tea Lounge, Outdoor Pool, 24/7 Room Service");
             hotelRepository.save(h6);
 
             Hotel h7 = new Hotel();
@@ -339,10 +387,12 @@ public class DataInitializer implements CommandLineRunner {
             h7.setDistanceKm(0.3);
             h7.setShuttleService(true);
             h7.setImage("https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?auto=format&fit=crop&w=800&q=80");
+            h7.setAmenities("Terminal Walkway Connection, Rooftop Bar, Complimentary Breakfast, Fitness Center");
             hotelRepository.save(h7);
         } else {
-            // Update existing hotels to ensure country field is populated
+            // Update existing hotels to ensure country and amenities fields are populated
             hotelRepository.findAll().forEach(hotel -> {
+                boolean changed = false;
                 if (hotel.getCountry() == null || hotel.getCountry().isEmpty()) {
                     if ("DXB".equalsIgnoreCase(hotel.getAirportCode())) hotel.setCountry("UAE");
                     else if ("SIN".equalsIgnoreCase(hotel.getAirportCode())) hotel.setCountry("Singapore");
@@ -351,6 +401,13 @@ public class DataInitializer implements CommandLineRunner {
                     else if ("HND".equalsIgnoreCase(hotel.getAirportCode())) hotel.setCountry("Japan");
                     else if ("CMB".equalsIgnoreCase(hotel.getAirportCode())) hotel.setCountry("Sri Lanka");
                     else if ("SYD".equalsIgnoreCase(hotel.getAirportCode())) hotel.setCountry("Australia");
+                    changed = true;
+                }
+                if (hotel.getAmenities() == null || hotel.getAmenities().trim().isEmpty()) {
+                    hotel.setAmenities("Free Shuttle 24/7, Buffet Breakfast, Rooftop Pool, Wi-Fi");
+                    changed = true;
+                }
+                if (changed) {
                     hotelRepository.save(hotel);
                 }
             });
