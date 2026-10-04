@@ -20,6 +20,7 @@ public class DataInitializer implements CommandLineRunner {
     private final UserCardRepository userCardRepository;
     private final ReservationRepository reservationRepository;
     private final PriceAlertRepository priceAlertRepository;
+    private final PaymentRepository paymentRepository;
 
     public DataInitializer(AirportRepository airportRepository,
                            AircraftRepository aircraftRepository,
@@ -29,7 +30,8 @@ public class DataInitializer implements CommandLineRunner {
                            RefundRequestRepository refundRequestRepository,
                            UserCardRepository userCardRepository,
                            ReservationRepository reservationRepository,
-                           PriceAlertRepository priceAlertRepository) {
+                           PriceAlertRepository priceAlertRepository,
+                           PaymentRepository paymentRepository) {
         this.airportRepository = airportRepository;
         this.aircraftRepository = aircraftRepository;
         this.flightRepository = flightRepository;
@@ -39,6 +41,7 @@ public class DataInitializer implements CommandLineRunner {
         this.userCardRepository = userCardRepository;
         this.reservationRepository = reservationRepository;
         this.priceAlertRepository = priceAlertRepository;
+        this.paymentRepository = paymentRepository;
     }
 
     @Override
@@ -443,35 +446,43 @@ public class DataInitializer implements CommandLineRunner {
             });
         }
 
-        // Seed Reservations
+        // Seed Reservations & Payments Table
         if (reservationRepository.count() == 0) {
-            userRepository.findByEmail("alex.morgan@skyline.com").ifPresent(user -> {
-                Reservation r1 = new Reservation();
-                r1.setPnrCode("SK-784920");
-                r1.setUserId(user.getUserId());
-                r1.setUserName(user.getFullName());
-                r1.setUserEmail(user.getEmail());
-                r1.setFlightNumber("SL-204");
-                r1.setOrigin("CMB");
-                r1.setDestination("LHR");
-                r1.setDepartureTime("2026-09-10T10:15:00");
-                r1.setCabinClass("ECONOMY");
-                r1.setTotalAmount(new BigDecimal("780.00"));
-                r1.setBookingStatus("CONFIRMED");
-                r1.setPaymentStatus("PAID");
-                r1.setPaymentMethod("CREDIT_CARD");
-                r1.setTransactionRef("TXN-9938102938");
-                r1.setHasLayover(true);
-                r1.setLayoverCity("Dubai");
-                r1.setLayoverAirport("DXB");
-                r1.setLayoverDurationHours(8.5);
+            userRepository.findAll().stream()
+                    .filter(u -> "PASSENGER".equalsIgnoreCase(u.getRole()))
+                    .findFirst()
+                    .ifPresent(user -> {
+                        Reservation r1 = new Reservation();
+                        r1.setPnrCode("SK-784920");
+                        r1.setUserId(user.getUserId());
+                        r1.setUserName(user.getFullName());
+                        r1.setUserEmail(user.getEmail());
+                        r1.setFlightNumber("SL-204");
+                        r1.setOrigin("CMB");
+                        r1.setDestination("LHR");
+                        r1.setDepartureTime("2026-09-10T10:15:00");
+                        r1.setCabinClass("ECONOMY");
+                        r1.setTotalAmount(new BigDecimal("780.00"));
+                        r1.setBookingStatus("CONFIRMED");
+                        r1.setPaymentStatus("PAID");
+                        r1.setPaymentMethod("CREDIT_CARD");
+                        r1.setTransactionRef("TXN-9938102938");
+                        r1.setHasLayover(true);
+                        r1.setLayoverCity("Dubai");
+                        r1.setLayoverAirport("DXB");
+                        r1.setLayoverDurationHours(8.5);
 
-                Passenger p1 = new Passenger(null, "Mr", "Alex", "Morgan", "1992-05-14", "N9849201", "Sri Lanka", "14A", "ECONOMY", "Vegetarian", 5);
-                r1.getPassengers().add(p1);
-                reservationRepository.save(r1);
-            });
+                        Passenger p1 = new Passenger(null, "Mr", "Alex", "Morgan", "1992-05-14", "N9849201", "Sri Lanka", "14A", "ECONOMY", "Vegetarian", 5);
+                        r1.getPassengers().add(p1);
+                        Reservation savedRes = reservationRepository.save(r1);
+
+                        if (paymentRepository.findByTransactionReference("TXN-9938102938").isEmpty()) {
+                            Payment pay1 = new Payment(null, savedRes.getReservationId(), "TXN-9938102938", "CREDIT_CARD", savedRes.getTotalAmount(), "SUCCESS", LocalDateTime.now().minusDays(1));
+                            paymentRepository.save(pay1);
+                        }
+                    });
         }
 
-        System.out.println("✅ DataInitializer: Database successfully seeded with default Airports, Aircraft, Users, Flights, Hotels, and Refunds!");
+        System.out.println("✅ DataInitializer: Database successfully seeded with default Airports, Aircraft, Users, Flights, Hotels, Payments, and Refunds!");
     }
 }

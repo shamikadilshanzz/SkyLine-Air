@@ -13,6 +13,7 @@ import {
   Globe,
   BedDouble,
   Star,
+  Calendar
 } from 'lucide-react';
 import {
   fetchHotelsApi,
@@ -21,6 +22,7 @@ import {
   deleteHotelApi,
   fetchHotelBookingsApi,
   updateHotelBookingStatusApi,
+  updateHotelBookingApi,
   deleteHotelBookingApi
 } from '../../api/apiService';
 
@@ -191,6 +193,16 @@ export default function HotelManagerPortal({ hotels = [], onHotelsUpdated, onBoo
   const [bookings, setBookings] = useState([]);
   const [bookingSearch, setBookingSearch] = useState('');
   const [bookingStatusFilter, setBookingStatusFilter] = useState('ALL');
+  const [editingBooking, setEditingBooking] = useState(null);
+  const [bookingForm, setBookingForm] = useState({
+    passengerName: '',
+    guestEmail: '',
+    roomType: 'Deluxe Transit Suite',
+    checkInDate: '',
+    checkOutDate: '',
+    bookingStatus: 'CONFIRMED',
+    amount: 0
+  });
 
   const showNotification = (type, text) => {
     setFeedbackMsg({ type, text });
@@ -234,18 +246,59 @@ export default function HotelManagerPortal({ hotels = [], onHotelsUpdated, onBoo
 
   const handleUpdateBookingStatus = async (bookingId, status) => {
     try {
-      await updateHotelBookingStatusApi(bookingId, status);
+      const today = new Date().toISOString().split('T')[0];
+      const extraData = {};
+      if (status === 'CHECKED_IN') {
+        extraData.checkInDate = today;
+      } else if (status === 'COMPLETED') {
+        extraData.checkOutDate = today;
+      }
+      const updated = await updateHotelBookingStatusApi(bookingId, status, extraData);
       setBookings((prev) =>
         prev.map((b) =>
           (b.hotelBookingId === bookingId || b.id === bookingId)
-            ? { ...b, bookingStatus: status }
+            ? { ...b, ...(updated || {}), bookingStatus: status, ...extraData }
             : b
         )
       );
-      showNotification('success', `Booking #${bookingId} status updated to ${status}.`);
+      showNotification('success', `Booking #${bookingId} updated to ${status}. Stay dates recorded.`);
       onBookingsUpdated && onBookingsUpdated();
     } catch (err) {
       showNotification('error', err.message || 'Could not update status.');
+    }
+  };
+
+  const openEditBookingModal = (b) => {
+    setEditingBooking(b);
+    setBookingForm({
+      passengerName: b.passengerName || '',
+      guestEmail: b.guestEmail || '',
+      roomType: b.roomType || 'Deluxe Transit Suite',
+      checkInDate: b.checkInDate || new Date().toISOString().split('T')[0],
+      checkOutDate: b.checkOutDate || new Date(Date.now() + 86400000).toISOString().split('T')[0],
+      bookingStatus: b.bookingStatus || 'CONFIRMED',
+      amount: b.amount || 0
+    });
+  };
+
+  const handleSaveBookingEdit = async (e) => {
+    e.preventDefault();
+    if (!editingBooking) return;
+    const bId = editingBooking.hotelBookingId || editingBooking.id;
+    try {
+      const updated = await updateHotelBookingApi(bId, bookingForm);
+      setBookings((prev) =>
+        prev.map((b) =>
+          (b.hotelBookingId === bId || b.id === bId)
+            ? { ...b, ...(updated || {}), ...bookingForm }
+            : b
+        )
+      );
+      showNotification('success', `Booking #${bId} updated successfully with Check-in / Check-out dates.`);
+      setEditingBooking(null);
+      onBookingsUpdated && onBookingsUpdated();
+    } catch (err) {
+      showNotification('error', err.message || 'Could not update booking.');
     }
   };
 
@@ -629,6 +682,7 @@ export default function HotelManagerPortal({ hotels = [], onHotelsUpdated, onBoo
                   <th className="p-3.5">PNR</th>
                   <th className="p-3.5">Passenger</th>
                   <th className="p-3.5">Hotel / Room</th>
+                  <th className="p-3.5">Stay Dates (In / Out)</th>
                   <th className="p-3.5">Type & Amount</th>
                   <th className="p-3.5">Status</th>
                   <th className="p-3.5 text-right">Desk Actions</th>
@@ -647,6 +701,16 @@ export default function HotelManagerPortal({ hotels = [], onHotelsUpdated, onBoo
                       <td className="p-3.5">
                         <div className="font-bold text-slate-800">{b.hotelName}</div>
                         <div className="text-[11px] text-slate-500">{b.roomType}</div>
+                      </td>
+                      <td className="p-3.5">
+                        <div className="font-semibold text-slate-800 flex items-center gap-1">
+                          <span className="text-[10px] uppercase font-bold text-slate-400">In:</span>
+                          <span className="font-mono text-emerald-700">{b.checkInDate || 'Not checked in'}</span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
+                          <span className="text-[10px] uppercase font-bold text-slate-400">Out:</span>
+                          <span className="font-mono text-slate-600">{b.checkOutDate || 'Open'}</span>
+                        </div>
                       </td>
                       <td className="p-3.5">
                         {b.isComplimentary ? (
@@ -672,6 +736,15 @@ export default function HotelManagerPortal({ hotels = [], onHotelsUpdated, onBoo
                         </span>
                       </td>
                       <td className="p-3.5 text-right space-x-1.5 whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => openEditBookingModal(b)}
+                          className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700 hover:bg-blue-100"
+                          title="Edit Booking & Dates"
+                        >
+                          <Calendar className="h-3 w-3 inline mr-1" />
+                          Dates
+                        </button>
                         {b.bookingStatus !== 'CHECKED_IN' && b.bookingStatus !== 'COMPLETED' && b.bookingStatus !== 'CANCELLED' && (
                           <button
                             type="button"
@@ -712,7 +785,7 @@ export default function HotelManagerPortal({ hotels = [], onHotelsUpdated, onBoo
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-slate-400 text-xs font-semibold">
+                    <td colSpan={8} className="p-8 text-center text-slate-400 text-xs font-semibold">
                       {bookingSearch ? `No hotel bookings found matching "${bookingSearch}".` : 'No guest hotel bookings recorded yet.'}
                     </td>
                   </tr>
@@ -902,6 +975,119 @@ export default function HotelManagerPortal({ hotels = [], onHotelsUpdated, onBoo
                   className="w-1/2 py-3 bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs rounded-xl shadow-md disabled:opacity-60"
                 >
                   {saving ? 'Saving...' : editingHotel ? 'Update & Save Changes' : 'Save Hotel to SQL'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT BOOKING & STAY DATES MODAL */}
+      {editingBooking && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-lg w-full shadow-2xl border border-slate-100 space-y-5 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+              <div>
+                <span className="text-[10px] font-mono font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                  Voucher: {editingBooking.voucherCode}
+                </span>
+                <h3 className="font-extrabold text-lg text-slate-900 flex items-center gap-2 mt-1">
+                  <Calendar className="w-5 h-5 text-blue-600" />
+                  Manage Booking & Stay Dates
+                </h3>
+              </div>
+              <button type="button" onClick={() => setEditingBooking(null)} className="p-1 rounded-full text-slate-400 hover:bg-slate-100">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveBookingEdit} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Check-In Date *</label>
+                  <input
+                    type="date"
+                    required
+                    value={bookingForm.checkInDate}
+                    onChange={(e) => setBookingForm(prev => ({ ...prev, checkInDate: e.target.value }))}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Check-Out Date *</label>
+                  <input
+                    type="date"
+                    required
+                    value={bookingForm.checkOutDate}
+                    onChange={(e) => setBookingForm(prev => ({ ...prev, checkOutDate: e.target.value }))}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Room Category / Type</label>
+                <select
+                  value={bookingForm.roomType}
+                  onChange={(e) => setBookingForm(prev => ({ ...prev, roomType: e.target.value }))}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20"
+                >
+                  <option value="Deluxe Transit Suite">Deluxe Transit Suite</option>
+                  <option value="Executive King Suite">Executive King Suite</option>
+                  <option value="Standard Transit Room">Standard Transit Room</option>
+                  <option value="Traditional Tatami Suite">Traditional Tatami Suite</option>
+                  <option value="Presidential Layover Suite">Presidential Layover Suite</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Booking Status</label>
+                <select
+                  value={bookingForm.bookingStatus}
+                  onChange={(e) => setBookingForm(prev => ({ ...prev, bookingStatus: e.target.value }))}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20"
+                >
+                  <option value="CONFIRMED">CONFIRMED (Reserved)</option>
+                  <option value="CHECKED_IN">CHECKED_IN (Guest In Hotel)</option>
+                  <option value="COMPLETED">COMPLETED (Checked Out)</option>
+                  <option value="CANCELLED">CANCELLED</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Guest Passenger Name</label>
+                  <input
+                    type="text"
+                    value={bookingForm.passengerName}
+                    onChange={(e) => setBookingForm(prev => ({ ...prev, passengerName: e.target.value }))}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Guest Contact Email</label>
+                  <input
+                    type="email"
+                    value={bookingForm.guestEmail}
+                    onChange={(e) => setBookingForm(prev => ({ ...prev, guestEmail: e.target.value }))}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingBooking(null)}
+                  className="w-1/2 py-3 bg-slate-100 text-slate-700 font-bold text-xs rounded-xl hover:bg-slate-200 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="w-1/2 py-3 bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs rounded-xl shadow-md cursor-pointer"
+                >
+                  Save Dates & Update
                 </button>
               </div>
             </form>

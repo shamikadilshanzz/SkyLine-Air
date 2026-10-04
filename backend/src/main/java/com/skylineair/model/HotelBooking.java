@@ -28,6 +28,7 @@ public class HotelBooking {
     private String passengerName;
 
     private String roomType = "Deluxe Transit Suite";
+    private Integer numberOfNights = 1;
     private LocalDate checkInDate;
     private LocalDate checkOutDate;
     private Boolean isComplimentary = false;

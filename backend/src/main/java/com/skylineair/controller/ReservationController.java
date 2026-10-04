@@ -1,11 +1,18 @@
 package com.skylineair.controller;
 
+import com.skylineair.model.HotelBooking;
+import com.skylineair.model.Passenger;
 import com.skylineair.model.Reservation;
+import com.skylineair.repository.FlightRepository;
+import com.skylineair.repository.HotelBookingRepository;
+import com.skylineair.repository.HotelRepository;
 import com.skylineair.repository.ReservationRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -17,11 +24,18 @@ import java.util.Random;
 public class ReservationController {
 
     private final ReservationRepository reservationRepository;
-    private final com.skylineair.repository.FlightRepository flightRepository;
+    private final FlightRepository flightRepository;
+    private final HotelBookingRepository hotelBookingRepository;
+    private final HotelRepository hotelRepository;
 
-    public ReservationController(ReservationRepository reservationRepository, com.skylineair.repository.FlightRepository flightRepository) {
+    public ReservationController(ReservationRepository reservationRepository,
+                                 FlightRepository flightRepository,
+                                 HotelBookingRepository hotelBookingRepository,
+                                 HotelRepository hotelRepository) {
         this.reservationRepository = reservationRepository;
         this.flightRepository = flightRepository;
+        this.hotelBookingRepository = hotelBookingRepository;
+        this.hotelRepository = hotelRepository;
     }
 
     @jakarta.annotation.PostConstruct
@@ -228,6 +242,96 @@ public class ReservationController {
                 flight.setAvailableSeats(Math.max(0, currentAvailable - bookedPassengerCount));
                 flightRepository.save(flight);
             });
+        }
+
+        // Auto-create HotelBooking record in database if hotel was chosen during booking
+        if (Boolean.TRUE.equals(saved.getHotelBooked()) || saved.getHotelId() != null || (saved.getHotelName() != null && !saved.getHotelName().trim().isEmpty())) {
+            try {
+                List<HotelBooking> existingHb = hotelBookingRepository.findByPnrCode(saved.getPnrCode());
+                if (existingHb.isEmpty()) {
+                    HotelBooking hb = new HotelBooking();
+                    hb.setReservationId(saved.getReservationId());
+                    hb.setPnrCode(saved.getPnrCode());
+                    hb.setUserId(saved.getUserId());
+                    hb.setGuestEmail(saved.getUserEmail());
+
+                    String passName = saved.getUserName();
+                    if (saved.getPassengers() != null && !saved.getPassengers().isEmpty()) {
+                        Passenger p0 = saved.getPassengers().get(0);
+                        if (p0.getFirstName() != null && !p0.getFirstName().trim().isEmpty()) {
+                            passName = (p0.getFirstName() + " " + (p0.getLastName() != null ? p0.getLastName() : "")).trim();
+                        }
+                    }
+                    hb.setPassengerName(passName != null && !passName.isBlank() ? passName : "Passenger");
+
+                    hb.setHotelId(saved.getHotelId());
+                    hb.setHotelName(saved.getHotelName());
+
+                    if (hb.getHotelId() == null && hb.getHotelName() != null && !hb.getHotelName().isBlank()) {
+                        hotelRepository.findByNameIgnoreCase(hb.getHotelName().trim()).ifPresent(h -> hb.setHotelId(h.getHotelId()));
+                    }
+                    if (hb.getHotelId() == null) {
+                        hotelRepository.findAll().stream().findFirst().ifPresent(h -> {
+                            hb.setHotelId(h.getHotelId());
+                            if (hb.getHotelName() == null) hb.setHotelName(h.getName());
+                        });
+                    }
+
+                    hb.setRoomType(saved.getHotelRoomType() != null && !saved.getHotelRoomType().isBlank() ? saved.getHotelRoomType() : "Deluxe Transit Suite");
+                    hb.setAmount(saved.getHotelPrice() != null ? saved.getHotelPrice() : BigDecimal.ZERO);
+                    hb.setIsComplimentary(Boolean.TRUE.equals(saved.getHasLayover()) && saved.getLayoverDurationHours() != null && saved.getLayoverDurationHours() >= 8);
+
+                    String vCode = saved.getHotelVoucherCode();
+                    if (vCode == null || vCode.isBlank()) {
+                        vCode = "HTV-" + (100000 + new Random().nextInt(900000));
+                        saved.setHotelVoucherCode(vCode);
+                        reservationRepository.save(saved);
+                    }
+                    hb.setVoucherCode(vCode);
+
+                    LocalDate checkIn = saved.getHotelCheckInDate();
+                    if (checkIn == null) {
+                        checkIn = LocalDate.now();
+                        if (saved.getDepartureTime() != null && !saved.getDepartureTime().trim().isEmpty()) {
+                            try {
+                                checkIn = LocalDate.parse(saved.getDepartureTime().split("T")[0]);
+                            } catch (Exception ignored) {}
+                        }
+                    }
+
+                    int nights = (saved.getHotelNights() != null && saved.getHotelNights() > 0) ? saved.getHotelNights() : 1;
+                    LocalDate checkOut = saved.getHotelCheckOutDate();
+                    if (checkOut == null) {
+                        checkOut = checkIn.plusDays(nights);
+                    } else {
+                        nights = (int) Math.max(1, java.time.temporal.ChronoUnit.DAYS.between(checkIn, checkOut));
+                    }
+
+                    saved.setHotelNights(nights);
+                    saved.setHotelCheckInDate(checkIn);
+                    saved.setHotelCheckOutDate(checkOut);
+                    reservationRepository.save(saved);
+
+                    hb.setNumberOfNights(nights);
+                    hb.setCheckInDate(checkIn);
+                    hb.setCheckOutDate(checkOut);
+                    hb.setBookingStatus("CONFIRMED");
+                    hb.setCreatedTimestamp(LocalDateTime.now());
+
+                    hotelBookingRepository.save(hb);
+
+                    if (hb.getHotelId() != null) {
+                        hotelRepository.findById(hb.getHotelId()).ifPresent(hotel -> {
+                            if (hotel.getAvailableRooms() != null && hotel.getAvailableRooms() > 0) {
+                                hotel.setAvailableRooms(hotel.getAvailableRooms() - 1);
+                                hotelRepository.save(hotel);
+                            }
+                        });
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("[ReservationController] Auto-create HotelBooking notice: " + e.getMessage());
+            }
         }
 
         return ResponseEntity.status(HttpStatus.CREATED).body(saved);

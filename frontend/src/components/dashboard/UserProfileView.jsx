@@ -26,7 +26,7 @@ import {
   Key
 } from 'lucide-react';
 
-export default function UserProfileView({ user, onUpdateUser, onOpenAuth }) {
+export default function UserProfileView({ user, onUpdateUser, onOpenAuth, onNavigateToBookings }) {
   const [activeSection, setActiveSection] = useState('personal');
   const [formData, setFormData] = useState(user || {});
   const [showSaveToast, setShowSaveToast] = useState(false);
@@ -861,12 +861,23 @@ export default function UserProfileView({ user, onUpdateUser, onOpenAuth }) {
                   </h3>
                   <p className="text-xs text-slate-500">Manage encrypted cards for express 1-click flight reservations</p>
                 </div>
-                <button
-                  onClick={() => setShowAddCardModal(true)}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-1.5"
-                >
-                  <Plus className="w-4 h-4" /> Add New Card
-                </button>
+                <div className="flex items-center gap-2">
+                  {onNavigateToBookings && (
+                    <button
+                      type="button"
+                      onClick={() => onNavigateToBookings('PAYMENTS')}
+                      className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl flex items-center gap-1.5 transition"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-blue-600" /> View Payment Records
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setShowAddCardModal(true)}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-1.5"
+                  >
+                    <Plus className="w-4 h-4" /> Add New Card
+                  </button>
+                </div>
               </div>
 
               {/* Cards Grid */}

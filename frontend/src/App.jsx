@@ -21,7 +21,7 @@ import { MOCK_NOTIFICATIONS, INITIAL_FLIGHTS, INITIAL_AIRPORTS, DEFAULT_USER_PRO
 // Allowed navigation tabs per role to auto-redirect on role change
 const ROLE_ALLOWED_TABS = {
   GUEST: ['search', 'results', 'seat-selection', 'payment', 'layover-hotels'],
-  PASSENGER: ['search', 'results', 'seat-selection', 'meals', 'payment', 'bookings', 'profile', 'layover-hotels', 'refunds'],
+  PASSENGER: ['search', 'results', 'seat-selection', 'meals', 'payment', 'bookings', 'payments', 'profile', 'layover-hotels', 'refunds'],
   TICKETING_OFFICER: ['reservation-mgmt', 'refunds', 'schedule-mgmt', 'search', 'results', 'seat-selection', 'profile'],
   ADMIN: ['schedule-mgmt', 'analytics', 'refunds', 'search', 'results', 'profile'],
   HOTEL_MANAGER: ['layover-hotels', 'profile']
@@ -39,6 +39,9 @@ const ROUTE_TO_TAB = {
   '/select-meal': 'meals',
   '/dining': 'meals',
   '/payment': 'payment',
+  '/payments': 'payments',
+  '/payment-history': 'payments',
+  '/payment-records': 'payments',
   '/bookings': 'bookings',
   '/profile': 'profile',
   '/dashboard': 'profile',
@@ -56,6 +59,7 @@ const TAB_TO_ROUTE = {
   'seat-selection': '/select-seat',
   'meals': '/meals',
   'payment': '/payment',
+  'payments': '/payments',
   'bookings': '/bookings',
   'profile': '/profile',
   'layover-hotels': '/layover-hotels',
@@ -221,6 +225,8 @@ export default function App() {
     }
     loadBackendData();
   }, []);
+
+  const [dashboardSection, setDashboardSection] = React.useState('TICKETS');
 
   const unreadNotifications = notifications.filter(n => !n.read).length;
 
@@ -406,12 +412,18 @@ export default function App() {
             onUpdateUser={(updatedUser) => setUser(updatedUser)}
             onPaymentSuccess={handlePaymentSuccess}
             onNavigateToHotels={() => setActiveTab('layover-hotels')}
+            onNavigateToBookings={(section = 'TICKETS') => {
+              setDashboardSection(section);
+              setActiveTab('bookings');
+            }}
+            onNavigateToProfile={() => setActiveTab('profile')}
           />
         )}
 
-        {activeTab === 'bookings' && (
+        {(activeTab === 'bookings' || activeTab === 'payments') && (
           <UserDashboard
             user={user}
+            initialDashboardSection={activeTab === 'payments' ? 'PAYMENTS' : dashboardSection}
             onSelectBooking={(booking) => {
               setReservationData(booking);
             }}
@@ -426,6 +438,10 @@ export default function App() {
             user={user}
             onUpdateUser={(updatedUser) => setUser(updatedUser)}
             onOpenAuth={() => setShowAuthModal(true)}
+            onNavigateToBookings={(section = 'TICKETS') => {
+              setDashboardSection(section);
+              setActiveTab('bookings');
+            }}
           />
         )}
 
