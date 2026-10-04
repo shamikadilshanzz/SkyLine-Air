@@ -216,6 +216,12 @@ export default function LayoverHotelView({ currentRole, user, onOpenAuth }) {
       independent: !currentReservation
     };
 
+    const nightsCount = Math.max(1, Number(hotelNights) || 1);
+    const checkIn = new Date().toISOString().split('T')[0];
+    const [y, m, d] = checkIn.split('-').map(Number);
+    const outDateObj = new Date(y, m - 1, d + nightsCount);
+    const checkOut = `${outDateObj.getFullYear()}-${String(outDateObj.getMonth() + 1).padStart(2, '0')}-${String(outDateObj.getDate()).padStart(2, '0')}`;
+
     try {
       const { bookHotelApi } = await import('../../api/apiService');
       const saved = await bookHotelApi({
@@ -227,6 +233,9 @@ export default function LayoverHotelView({ currentRole, user, onOpenAuth }) {
         pnrCode: linkedPnr,
         passengerName,
         roomType: selectedRoomType,
+        numberOfNights: nightsCount,
+        checkInDate: checkIn,
+        checkOutDate: checkOut,
         isComplimentary: pricing.complimentary,
         amount: pricing.amount,
         bookingStatus: 'CONFIRMED'

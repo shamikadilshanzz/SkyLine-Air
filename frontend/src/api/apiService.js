@@ -291,6 +291,40 @@ export async function processPaymentApi(paymentData) {
   });
 }
 
+export async function fetchPaymentsApi() {
+  try {
+    return await fetchApi('/payments');
+  } catch (err) {
+    console.warn('[fetchPaymentsApi] Notice:', err.message);
+    return [];
+  }
+}
+
+export async function fetchUserPaymentsApi(userId, email) {
+  try {
+    const rawUserId = typeof userId === 'number' ? userId : parseInt(String(userId || '').replace(/\D/g, ''), 10);
+    if (rawUserId && !isNaN(rawUserId)) {
+      return await fetchApi(`/payments/user/${rawUserId}`);
+    }
+    if (email) {
+      return await fetchApi(`/payments/email/${encodeURIComponent(email)}`);
+    }
+    return [];
+  } catch (err) {
+    console.warn('[fetchUserPaymentsApi] Notice:', err.message);
+    return [];
+  }
+}
+
+export async function fetchPaymentByTxnApi(txnRef) {
+  try {
+    return await fetchApi(`/payments/transaction/${encodeURIComponent(txnRef)}`);
+  } catch (err) {
+    console.warn('[fetchPaymentByTxnApi] Notice:', err.message);
+    return null;
+  }
+}
+
 export async function sendPaymentOtpApi({ email, passengerName, amount, pnr }) {
   return await fetchApi('/payments/send-otp', {
     method: 'POST',
@@ -489,11 +523,19 @@ export async function fetchHotelBookingsByUserApi(userId) {
   }
 }
 
-export async function updateHotelBookingStatusApi(bookingId, status) {
+export async function updateHotelBookingStatusApi(bookingId, status, extraData = {}) {
   const rawId = typeof bookingId === 'number' ? bookingId : parseInt(String(bookingId).replace(/\D/g, ''), 10);
   return await fetchApi(`/hotels/bookings/${rawId}/status`, {
     method: 'PUT',
-    body: JSON.stringify({ status })
+    body: JSON.stringify({ status, ...extraData })
+  });
+}
+
+export async function updateHotelBookingApi(bookingId, updatedData) {
+  const rawId = typeof bookingId === 'number' ? bookingId : parseInt(String(bookingId).replace(/\D/g, ''), 10);
+  return await fetchApi(`/hotels/bookings/${rawId}`, {
+    method: 'PUT',
+    body: JSON.stringify(updatedData)
   });
 }
 

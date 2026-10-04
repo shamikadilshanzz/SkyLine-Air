@@ -54,6 +54,9 @@ public class Reservation {
     private String hotelCity;
     private String hotelCountry;
     private String hotelRoomType;
+    private Integer hotelNights = 1;
+    private java.time.LocalDate hotelCheckInDate;
+    private java.time.LocalDate hotelCheckOutDate;
     private BigDecimal hotelPrice = BigDecimal.ZERO;
     private String hotelVoucherCode;
 

@@ -16,7 +16,8 @@ import {
   LogOut,
   Utensils,
   Menu,
-  X
+  X,
+  Receipt
 } from 'lucide-react';
 
 export default function Navbar({
@@ -53,6 +54,7 @@ export default function Navbar({
     { id: 'reservation-mgmt', label: 'Manage Reservations', icon: Ticket, roles: ['TICKETING_OFFICER', /*'ADMIN'*/] },
     { id: 'meals', label: 'In-Flight Meals', icon: Utensils, badge: 'New', roles: ['PASSENGER'] },
     { id: 'bookings', label: 'My Bookings', icon: Ticket, roles: ['PASSENGER'] },
+    { id: 'payments', label: 'Payment History', icon: Receipt, roles: ['PASSENGER'] },
     /*{ id: 'profile', label: 'My Profile', icon: User, roles: ['PASSENGER', 'TICKETING_OFFICER', 'ADMIN', 'HOTEL_MANAGER'] },*/
     { id: 'layover-hotels', label: 'Layover Hotels', icon: Hotel, roles: ['GUEST', 'PASSENGER', 'HOTEL_MANAGER'] },
     { id: 'refunds', label: 'Refund Tracker', icon: RefreshCw, roles: ['PASSENGER', 'TICKETING_OFFICER'/*, 'ADMIN'*/] },
@@ -75,6 +77,7 @@ export default function Navbar({
   const isTabActive = (itemId) => {
     if (itemId === 'search') return activeTab === 'search' || activeTab === 'results' || activeTab === 'seat-selection' || activeTab === 'payment';
     if (itemId === 'profile') return activeTab === 'profile' || activeTab === 'dashboard';
+    if (itemId === 'payments') return activeTab === 'payments';
     return activeTab === itemId;
   };
 
@@ -291,6 +294,13 @@ export default function Navbar({
                         className="flex w-full items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left font-bold text-slate-200 transition hover:bg-white/10"
                       >
                         <User className="h-4 w-4 text-blue-400" /> My Profile
+                      </button>
+                      <button
+                        role="menuitem"
+                        onClick={() => handleNavClick('payments')}
+                        className="flex w-full items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left font-bold text-slate-200 transition hover:bg-white/10"
+                      >
+                        <Receipt className="h-4 w-4 text-emerald-400" /> Payment Records & Invoices
                       </button>
                       <button
                         role="menuitem"

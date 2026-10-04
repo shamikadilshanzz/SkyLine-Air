@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -140,11 +141,59 @@ public class HotelController {
     @PostMapping("/book")
     public ResponseEntity<?> bookHotel(@RequestBody HotelBooking booking) {
         booking.setCreatedTimestamp(LocalDateTime.now());
-        if (booking.getBookingStatus() == null) {
+        if (booking.getBookingStatus() == null || booking.getBookingStatus().isBlank()) {
             booking.setBookingStatus("CONFIRMED");
         }
         if (booking.getVoucherCode() == null || booking.getVoucherCode().isBlank()) {
             booking.setVoucherCode("HTV-" + (100000 + (int) (Math.random() * 900000)));
+        }
+        if (booking.getCheckInDate() == null) {
+            booking.setCheckInDate(LocalDate.now());
+        }
+        int nights = (booking.getNumberOfNights() != null && booking.getNumberOfNights() > 0) ? booking.getNumberOfNights() : 1;
+        if (booking.getCheckOutDate() == null) {
+            booking.setCheckOutDate(booking.getCheckInDate().plusDays(nights));
+        } else {
+            long diff = java.time.temporal.ChronoUnit.DAYS.between(booking.getCheckInDate(), booking.getCheckOutDate());
+            if (diff > 0) {
+                nights = (int) diff;
+                booking.setNumberOfNights(nights);
+            }
+        }
+        booking.setNumberOfNights(nights);
+
+        // Resolve hotelId if missing
+        if (booking.getHotelId() == null && booking.getHotelName() != null && !booking.getHotelName().isBlank()) {
+            hotelRepository.findByNameIgnoreCase(booking.getHotelName().trim()).ifPresent(h -> booking.setHotelId(h.getHotelId()));
+        }
+        if (booking.getHotelId() == null) {
+            hotelRepository.findAll().stream().findFirst().ifPresent(h -> {
+                booking.setHotelId(h.getHotelId());
+                if (booking.getHotelName() == null) booking.setHotelName(h.getName());
+            });
+        }
+
+        // If booking already exists for this PNR, update it
+        if (booking.getPnrCode() != null && !booking.getPnrCode().isBlank()) {
+            List<HotelBooking> existing = hotelBookingRepository.findByPnrCode(booking.getPnrCode());
+            if (!existing.isEmpty()) {
+                HotelBooking b = existing.get(0);
+                if (booking.getHotelId() != null) b.setHotelId(booking.getHotelId());
+                if (booking.getHotelName() != null) b.setHotelName(booking.getHotelName());
+                if (booking.getUserId() != null) b.setUserId(booking.getUserId());
+                if (booking.getGuestEmail() != null) b.setGuestEmail(booking.getGuestEmail());
+                if (booking.getPassengerName() != null) b.setPassengerName(booking.getPassengerName());
+                if (booking.getRoomType() != null) b.setRoomType(booking.getRoomType());
+                if (booking.getAmount() != null) b.setAmount(booking.getAmount());
+                if (booking.getNumberOfNights() != null) b.setNumberOfNights(booking.getNumberOfNights());
+                if (booking.getCheckInDate() != null) b.setCheckInDate(booking.getCheckInDate());
+                if (booking.getCheckOutDate() != null) b.setCheckOutDate(booking.getCheckOutDate());
+                if (booking.getIsComplimentary() != null) b.setIsComplimentary(booking.getIsComplimentary());
+                if (booking.getVoucherCode() != null) b.setVoucherCode(booking.getVoucherCode());
+                b.setBookingStatus(booking.getBookingStatus() != null ? booking.getBookingStatus() : "CONFIRMED");
+                HotelBooking updated = hotelBookingRepository.save(b);
+                return ResponseEntity.ok(updated);
+            }
         }
 
         HotelBooking savedBooking = hotelBookingRepository.save(booking);
@@ -161,15 +210,90 @@ public class HotelController {
         return ResponseEntity.status(HttpStatus.CREATED).body(savedBooking);
     }
 
+    @PutMapping("/bookings/{id}")
+    public ResponseEntity<?> updateBooking(@PathVariable Long id, @RequestBody Map<String, Object> request) {
+        return hotelBookingRepository.findById(id)
+                .map(b -> {
+                    if (request.containsKey("bookingStatus") && request.get("bookingStatus") != null) {
+                        b.setBookingStatus(request.get("bookingStatus").toString().trim().toUpperCase());
+                    }
+                    if (request.containsKey("roomType") && request.get("roomType") != null) {
+                        b.setRoomType(request.get("roomType").toString().trim());
+                    }
+                    if (request.containsKey("passengerName") && request.get("passengerName") != null) {
+                        b.setPassengerName(request.get("passengerName").toString().trim());
+                    }
+                    if (request.containsKey("guestEmail") && request.get("guestEmail") != null) {
+                        b.setGuestEmail(request.get("guestEmail").toString().trim());
+                    }
+                    if (request.containsKey("amount") && request.get("amount") != null) {
+                        try {
+                            b.setAmount(new BigDecimal(request.get("amount").toString()));
+                        } catch (Exception ignored) {}
+                    }
+                    if (request.containsKey("checkInDate") && request.get("checkInDate") != null) {
+                        try {
+                            b.setCheckInDate(LocalDate.parse(request.get("checkInDate").toString().trim()));
+                        } catch (Exception ignored) {}
+                    }
+                    if (request.containsKey("checkOutDate") && request.get("checkOutDate") != null) {
+                        try {
+                            b.setCheckOutDate(LocalDate.parse(request.get("checkOutDate").toString().trim()));
+                        } catch (Exception ignored) {}
+                    }
+
+                    // Auto-sync dates based on lifecycle state if still null
+                    if ("CHECKED_IN".equalsIgnoreCase(b.getBookingStatus()) && b.getCheckInDate() == null) {
+                        b.setCheckInDate(LocalDate.now());
+                    } else if (("COMPLETED".equalsIgnoreCase(b.getBookingStatus()) || "CHECKED_OUT".equalsIgnoreCase(b.getBookingStatus())) && b.getCheckOutDate() == null) {
+                        if (b.getCheckInDate() == null) {
+                            b.setCheckInDate(LocalDate.now().minusDays(1));
+                        }
+                        b.setCheckOutDate(LocalDate.now());
+                    }
+
+                    return ResponseEntity.ok(hotelBookingRepository.save(b));
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
     @PutMapping("/bookings/{id}/status")
-    public ResponseEntity<?> updateBookingStatus(@PathVariable Long id, @RequestBody Map<String, String> request) {
-        String newStatus = request.get("status");
+    public ResponseEntity<?> updateBookingStatus(@PathVariable Long id, @RequestBody Map<String, Object> request) {
+        String newStatus = request.get("status") != null
+                ? request.get("status").toString()
+                : (request.get("bookingStatus") != null ? request.get("bookingStatus").toString() : null);
         if (newStatus == null || newStatus.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("message", "status is required"));
         }
         return hotelBookingRepository.findById(id)
                 .map(b -> {
-                    b.setBookingStatus(newStatus.trim().toUpperCase());
+                    String cleanStatus = newStatus.trim().toUpperCase();
+                    b.setBookingStatus(cleanStatus);
+
+                    if ("CHECKED_IN".equalsIgnoreCase(cleanStatus)) {
+                        if (b.getCheckInDate() == null) {
+                            b.setCheckInDate(LocalDate.now());
+                        }
+                    } else if ("COMPLETED".equalsIgnoreCase(cleanStatus) || "CHECKED_OUT".equalsIgnoreCase(cleanStatus)) {
+                        if (b.getCheckInDate() == null) {
+                            b.setCheckInDate(LocalDate.now().minusDays(1));
+                        }
+                        if (b.getCheckOutDate() == null) {
+                            b.setCheckOutDate(LocalDate.now());
+                        }
+                    }
+
+                    if (request.get("checkInDate") != null) {
+                        try {
+                            b.setCheckInDate(LocalDate.parse(request.get("checkInDate").toString().trim()));
+                        } catch (Exception ignored) {}
+                    }
+                    if (request.get("checkOutDate") != null) {
+                        try {
+                            b.setCheckOutDate(LocalDate.parse(request.get("checkOutDate").toString().trim()));
+                        } catch (Exception ignored) {}
+                    }
+
                     return ResponseEntity.ok(hotelBookingRepository.save(b));
                 })
                 .orElse(ResponseEntity.notFound().build());

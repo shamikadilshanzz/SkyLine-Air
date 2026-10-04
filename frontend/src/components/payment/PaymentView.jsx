@@ -23,9 +23,16 @@ import {
   Clock,
   Key,
   Send,
-  ArrowRight
+  ArrowRight,
+  Receipt,
+  ExternalLink,
+  ChevronRight,
+  Copy,
+  Check,
+  Ticket
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import PaymentReceiptModal from './PaymentReceiptModal';
 
 /* ---------- shared style tokens (same as LayoverHotelView / UserDashboard) ---------- */
 const CARD = 'rounded-[1.75rem] border border-slate-200/80 bg-white shadow-[0_8px_30px_rgb(15,30,92,0.06)]';
@@ -38,10 +45,16 @@ export default function PaymentView({
   user,
   onUpdateUser,
   onPaymentSuccess,
-  onNavigateToHotels
+  onNavigateToHotels,
+  onNavigateToBookings,
+  onNavigateToProfile
 }) {
   const [paymentMethod, setPaymentMethod] = useState('CARD'); // 'CARD', 'NETBANKING', 'PAYPAL', 'POINTS'
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [showPaymentRecordsModal, setShowPaymentRecordsModal] = useState(false);
+  const [userPaymentRecords, setUserPaymentRecords] = useState([]);
+  const [copiedTxn, setCopiedTxn] = useState(false);
 
   // Saved Cards state initialized from user profile or loaded from SQL DB
   const [userSavedCards, setUserSavedCards] = useState(user?.savedCards || []);
@@ -155,6 +168,42 @@ export default function PaymentView({
       setOtpEmail(user.email);
     }
   }, [user]);
+
+  // Load User Payment Records for Transaction History
+  useEffect(() => {
+    async function loadUserPayments() {
+      try {
+        const { fetchUserPaymentsApi, fetchUserReservationsApi } = await import('../../api/apiService');
+        const rawUserId = user?.rawId || user?.userId || (user?.id ? parseInt(String(user.id).replace(/\D/g, '')) : null);
+        const email = user?.email || reservationData?.userEmail || otpEmail;
+        const [apiPayments, apiRes] = await Promise.all([
+          fetchUserPaymentsApi(rawUserId, email).catch(() => []),
+          fetchUserReservationsApi(rawUserId, email).catch(() => [])
+        ]);
+        if (apiRes && apiRes.length > 0) {
+          const records = apiRes.map(r => ({
+            id: r.reservationId || r.id,
+            pnr: r.pnrCode || r.pnr,
+            flightNumber: r.flightNumber || 'SL-204',
+            origin: r.origin || 'CMB',
+            destination: r.destination || 'LHR',
+            amount: r.totalAmount || 780,
+            transactionRef: r.transactionRef || 'TXN-9938102938',
+            paymentStatus: r.paymentStatus || 'PAID',
+            paymentMethod: r.paymentMethod || 'CREDIT_CARD',
+            departureTime: r.departureTime || '2026-09-10T10:15:00',
+            date: r.createdAt || new Date().toISOString()
+          }));
+          setUserPaymentRecords(records);
+        }
+      } catch (err) {
+        console.warn('[PaymentView] History load notice:', err.message);
+      }
+    }
+    if (paymentCompleted) {
+      loadUserPayments();
+    }
+  }, [paymentCompleted, user, reservationData, otpEmail]);
 
   // Live Countdown Timer for OTP Expiration
   useEffect(() => {
@@ -329,6 +378,15 @@ export default function PaymentView({
         hotelCity: reservationData?.selectedHotel?.city,
         hotelCountry: reservationData?.selectedHotel?.country,
         hotelRoomType: reservationData?.selectedHotel?.roomType,
+        hotelNights: Math.max(1, Number(reservationData?.selectedHotel?.numberOfNights) || 1),
+        hotelCheckInDate: reservationData?.flight?.departureTime ? reservationData.flight.departureTime.split('T')[0] : new Date().toISOString().split('T')[0],
+        hotelCheckOutDate: (() => {
+          const checkIn = reservationData?.flight?.departureTime ? reservationData.flight.departureTime.split('T')[0] : new Date().toISOString().split('T')[0];
+          const n = Math.max(1, Number(reservationData?.selectedHotel?.numberOfNights) || 1);
+          const [y, m, d] = checkIn.split('-').map(Number);
+          const out = new Date(y, m - 1, d + n);
+          return `${out.getFullYear()}-${String(out.getMonth() + 1).padStart(2, '0')}-${String(out.getDate()).padStart(2, '0')}`;
+        })(),
         hotelPrice: hotelFee,
         hotelVoucherCode: reservationData?.selectedHotel?.voucherCode || (reservationData?.selectedHotel ? `HTV-${Math.floor(100000 + Math.random() * 900000)}` : null),
         passengers: (reservationData?.passengers && reservationData.passengers.length > 0)
@@ -372,19 +430,39 @@ export default function PaymentView({
       // Automatically record hotel booking if hotel was selected
       if (reservationData?.selectedHotel) {
         try {
-          const { bookHotelApi } = await import('../../api/apiService');
+          const checkIn = reservationData?.flight?.departureTime ? reservationData.flight.departureTime.split('T')[0] : new Date().toISOString().split('T')[0];
+          const nightsCount = Math.max(1, Number(reservationData.selectedHotel.numberOfNights) || 1);
+          const [y, m, d] = checkIn.split('-').map(Number);
+          const outDateObj = new Date(y, m - 1, d + nightsCount);
+          const checkOut = `${outDateObj.getFullYear()}-${String(outDateObj.getMonth() + 1).padStart(2, '0')}-${String(outDateObj.getDate()).padStart(2, '0')}`;
+          const hotelIdVal = reservationData.selectedHotel.rawId
+            || (reservationData.selectedHotel.hotelId ? Number(reservationData.selectedHotel.hotelId) : null)
+            || (reservationData.selectedHotel.id ? parseInt(String(reservationData.selectedHotel.id).replace(/\D/g, ''), 10) : null)
+            || 1;
+
+          const passengerFullName = user?.name
+            || (reservationData?.passenger?.firstName ? `${reservationData.passenger.firstName} ${reservationData.passenger.lastName}` : null)
+            || (reservationData?.passengers?.[0]?.firstName ? `${reservationData.passengers[0].firstName} ${reservationData.passengers[0].lastName}` : null)
+            || cardName
+            || 'Alex Morgan';
+
+          const voucher = reservationData?.selectedHotel?.voucherCode || reservationData?.hotelVoucherCode || resRecord?.hotelVoucherCode || `HTV-${Math.floor(100000 + Math.random() * 900000)}`;
+
           await bookHotelApi({
-            hotelId: reservationData.selectedHotel.rawId || (reservationData.selectedHotel.id ? parseInt(String(reservationData.selectedHotel.id).replace(/\D/g, '')) : 1) || 1,
+            hotelId: hotelIdVal,
             hotelName: reservationData.selectedHotel.name,
-            userId: user?.rawId || null,
-            guestEmail: user?.email || null,
-            voucherCode: reservationData?.selectedHotel?.voucherCode || reservationData?.hotelVoucherCode || null,
+            userId: user?.rawId || (user?.id ? parseInt(String(user.id).replace(/\D/g, ''), 10) : null) || null,
+            guestEmail: otpEmail || user?.email || 'passenger@skylineair.com',
+            voucherCode: voucher,
             reservationId: resId,
             pnrCode: resRecord?.pnrCode || reservationData?.pnr,
-            passengerName: user?.name || (reservationData?.passenger?.firstName ? `${reservationData.passenger.firstName} ${reservationData.passenger.lastName}` : 'Alex Morgan'),
+            passengerName: passengerFullName,
             roomType: reservationData.selectedHotel.roomType || 'Deluxe Transit Suite',
-            isComplimentary: false,
-            amount: hotelFee,
+            numberOfNights: nightsCount,
+            checkInDate: checkIn,
+            checkOutDate: checkOut,
+            isComplimentary: Boolean(reservationData?.flight?.hasLayover && (reservationData?.flight?.layoverDurationHours >= 8)),
+            amount: hotelFee || reservationData.selectedHotel.totalPrice || reservationData.selectedHotel.pricePerNight || 0,
             bookingStatus: 'CONFIRMED'
           });
         } catch (hErr) {
@@ -922,38 +1000,300 @@ export default function PaymentView({
         /* CONFIRMED BOOKING & E-TICKET DISPLAY */
         <div className="space-y-6 printable-eticket">
 
-          {/* Confirmed Alert Banner */}
-          <div className="no-print flex flex-wrap items-center justify-between gap-4 rounded-[1.75rem] bg-gradient-to-br from-emerald-500 to-emerald-600 p-6 text-white shadow-2xl shadow-emerald-600/25">
-            <div className="flex items-center gap-4">
-              <div className="sl-pop flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 text-white backdrop-blur">
-                <CheckCircle2 className="h-8 w-8" />
+          {/* Confirmed Alert Banner & Quick Navigation Hub */}
+          <div className="no-print space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-4 rounded-[1.75rem] bg-gradient-to-br from-emerald-500 to-emerald-600 p-6 text-white shadow-2xl shadow-emerald-600/25">
+              <div className="flex items-center gap-4">
+                <div className="sl-pop flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 text-white backdrop-blur shrink-0">
+                  <CheckCircle2 className="h-8 w-8" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] uppercase font-black tracking-widest bg-white/20 px-2.5 py-0.5 rounded-full text-emerald-100">
+                      Payment Settled • 3D Secure 2.0
+                    </span>
+                  </div>
+                  <h3 className="text-xl font-black mt-1">Payment confirmed & {passengerCount} e-ticket(s) issued!</h3>
+                  <p className="text-xs text-emerald-100 mt-0.5">
+                    Transaction ref: <span className="font-mono font-bold text-white">{transactionRef}</span> · Confirmation email & SMS dispatched.
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-xl font-black">Payment confirmed & {passengerCount} e-ticket(s) issued!</h3>
-                <p className="text-xs text-emerald-100">
-                  Transaction ref: <span className="font-mono font-bold">{transactionRef}</span> · Confirmation email & SMS dispatched to passenger(s).
-                </p>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowReceiptModal(true)}
+                  className="flex items-center gap-1.5 rounded-xl bg-white px-4 py-2.5 text-xs font-extrabold text-emerald-950 shadow-md transition hover:bg-emerald-50 cursor-pointer active:scale-95"
+                >
+                  <Receipt className="h-4 w-4 text-emerald-700" />
+                  <span>View Payment Receipt</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handlePrint}
+                  className="flex items-center gap-1.5 rounded-xl bg-emerald-700/80 px-4 py-2.5 text-xs font-extrabold text-white shadow-md transition hover:bg-emerald-700 border border-emerald-400/40 cursor-pointer active:scale-95"
+                >
+                  <Printer className="h-4 w-4" />
+                  <span>Print E-Tickets</span>
+                </button>
+
+                {reservationData?.flight?.hasLayover && (
+                  <button
+                    type="button"
+                    onClick={onNavigateToHotels}
+                    className="flex items-center gap-1.5 rounded-xl bg-amber-400 px-4 py-2.5 text-xs font-black text-slate-950 shadow-md transition hover:bg-amber-300 cursor-pointer active:scale-95"
+                  >
+                    <Hotel className="h-4 w-4" />
+                    <span>Book Layover Hotel</span>
+                  </button>
+                )}
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handlePrint}
-                className="flex items-center gap-1.5 rounded-xl bg-white px-4 py-2.5 text-xs font-extrabold text-emerald-900 shadow-md transition hover:bg-emerald-50"
-              >
-                <Printer className="h-4 w-4" /> Print e-tickets
-              </button>
+            {/* Post-Payment Action & Navigation Bar (Navigation to Payment Records & History) */}
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 shrink-0">
+                  <CreditCard className="h-5 w-5" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-extrabold text-slate-900">Passenger Payment Records & Invoices Hub</h4>
+                  <p className="text-[11px] text-slate-500">
+                    Access all your past payments, official tax invoices, and booking histories anytime.
+                  </p>
+                </div>
+              </div>
 
-              {reservationData?.flight?.hasLayover && (
+              <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
                 <button
-                  onClick={onNavigateToHotels}
-                  className="flex animate-bounce items-center gap-1.5 rounded-xl bg-amber-400 px-4 py-2.5 text-xs font-black text-slate-950 shadow-md transition hover:bg-amber-300"
+                  type="button"
+                  onClick={() => {
+                    if (onNavigateToBookings) {
+                      onNavigateToBookings('PAYMENTS');
+                    } else if (onNavigateToProfile) {
+                      onNavigateToProfile();
+                    } else {
+                      setShowPaymentRecordsModal(true);
+                    }
+                  }}
+                  className="flex-1 md:flex-initial flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2.5 text-xs font-extrabold text-white shadow-md shadow-blue-600/20 hover:from-blue-700 hover:to-indigo-700 transition active:scale-95 cursor-pointer"
                 >
-                  🏨 Book layover hotel
+                  <FileText className="h-4 w-4" />
+                  <span>See Payment Records</span>
+                  <ChevronRight className="h-3.5 w-3.5" />
                 </button>
-              )}
+
+                <button
+                  type="button"
+                  onClick={() => onNavigateToBookings && onNavigateToBookings('TICKETS')}
+                  className="flex-1 md:flex-initial flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 px-4 py-2.5 text-xs font-bold text-slate-700 transition active:scale-95 cursor-pointer"
+                >
+                  <Ticket className="h-4 w-4 text-blue-600" />
+                  <span>My Bookings</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowPaymentRecordsModal(!showPaymentRecordsModal)}
+                  className="flex items-center justify-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50/70 hover:bg-blue-100/70 px-3.5 py-2.5 text-xs font-bold text-blue-700 transition active:scale-95 cursor-pointer"
+                >
+                  <Clock className="h-3.5 w-3.5" />
+                  <span>{showPaymentRecordsModal ? 'Hide Quick History' : 'Quick History'}</span>
+                </button>
+              </div>
             </div>
           </div>
+
+          {/* Dedicated Payment Record & Tax Invoice Summary Card */}
+          <div className="rounded-[1.75rem] border border-slate-200/80 bg-white p-6 md:p-8 shadow-lg space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800">
+                    Official Payment Record
+                  </span>
+                  <span className="text-xs text-slate-400 font-mono">
+                    Ref: {transactionRef}
+                  </span>
+                </div>
+                <h3 className="font-extrabold text-lg text-slate-900 flex items-center gap-2 mt-1">
+                  <Receipt className="w-5 h-5 text-blue-600" />
+                  Payment Transaction Summary & Tax Invoice
+                </h3>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowReceiptModal(true)}
+                  className="flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 text-xs font-bold shadow-md shadow-blue-600/20 transition cursor-pointer"
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>View Full Invoice & Receipt</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Transaction Key Parameters Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Amount Paid</span>
+                <span className="font-mono font-black text-emerald-600 text-base block mt-0.5">
+                  ${totalAmount.toLocaleString()}.00 USD
+                </span>
+                <span className="text-[10px] text-emerald-700 font-semibold">✓ Settled in Full</span>
+              </div>
+
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Payment Method</span>
+                <span className="font-extrabold text-slate-900 text-xs block mt-0.5 flex items-center gap-1">
+                  <CreditCard className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                  <span>{paymentMethod === 'CARD' ? `${cardNetwork} (•••• ${cardNumber.replace(/\D/g, '').slice(-4) || '8892'})` : paymentMethod}</span>
+                </span>
+                <span className="text-[10px] text-slate-500 font-medium">3D-Secure 2.0 Auth</span>
+              </div>
+
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Transaction Reference</span>
+                <div className="flex items-center gap-1 mt-0.5">
+                  <span className="font-mono font-bold text-blue-600 text-xs truncate">{transactionRef}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(transactionRef);
+                      setCopiedTxn(true);
+                      setTimeout(() => setCopiedTxn(false), 2000);
+                    }}
+                    className="p-1 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-700"
+                    title="Copy Transaction Ref"
+                  >
+                    {copiedTxn ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                  </button>
+                </div>
+                <span className="text-[10px] text-slate-500">Gateway Token Active</span>
+              </div>
+
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Booking Reference</span>
+                <span className="font-mono font-black text-slate-900 text-sm block mt-0.5">
+                  {reservationData?.pnr || 'SK-784920'}
+                </span>
+                <span className="text-[10px] text-blue-600 font-semibold">Flight {reservationData?.flight?.flightNumber || 'SL-204'}</span>
+              </div>
+            </div>
+
+            {/* Quick Itemized Line Summary */}
+            <div className="space-y-2 pt-2">
+              <div className="flex justify-between items-center text-xs text-slate-600">
+                <span>Base Flight Airfare ({passengerCount} {passengerCount === 1 ? 'passenger' : 'passengers'} • {effectiveCabinClass} Class)</span>
+                <span className="font-semibold text-slate-900">${baseFare}.00</span>
+              </div>
+              <div className="flex justify-between items-center text-xs text-slate-600">
+                <span>International Passenger Duty & Taxes ({passengerCount} x $45)</span>
+                <span className="font-semibold text-slate-900">${taxesFees}.00</span>
+              </div>
+              <div className="flex justify-between items-center text-xs text-slate-600">
+                <span>Airline Fuel Surcharge ({passengerCount} x $25)</span>
+                <span className="font-semibold text-slate-900">${fuelSurcharge}.00</span>
+              </div>
+              {mealFee > 0 && (
+                <div className="flex justify-between items-center text-xs text-amber-700">
+                  <span>In-Flight Dining Cuisine Selection</span>
+                  <span className="font-bold">+${mealFee}.00</span>
+                </div>
+              )}
+              {hotelFee > 0 && (
+                <div className="flex justify-between items-center text-xs text-indigo-700">
+                  <span>Transit Hotel Accommodation ({reservationData?.selectedHotel?.name || 'Transit Stay'})</span>
+                  <span className="font-bold">+${hotelFee}.00</span>
+                </div>
+              )}
+              {discountAmount > 0 && (
+                <div className="flex justify-between items-center text-xs text-emerald-600 font-bold">
+                  <span>Promotional Discount (SKY2026)</span>
+                  <span>-${discountAmount}.00</span>
+                </div>
+              )}
+              {usePoints && (
+                <div className="flex justify-between items-center text-xs text-indigo-600 font-bold">
+                  <span>SkyMiles Loyalty Redemption</span>
+                  <span>-$50.00</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center text-sm font-extrabold text-slate-900 pt-3 border-t border-slate-100">
+                <span>Net Total Settled</span>
+                <span className="text-xl text-blue-600 font-black">${totalAmount}.00 USD</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Payment History Accordion / Drawer when opened */}
+          {showPaymentRecordsModal && (
+            <div className="rounded-[1.75rem] border border-blue-200 bg-blue-50/40 p-6 md:p-8 space-y-4 animate-in fade-in duration-200">
+              <div className="flex items-center justify-between pb-3 border-b border-blue-200/60">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-xs">
+                    <Clock className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-extrabold text-slate-900">Recent Payment Records & Invoices</h4>
+                    <p className="text-xs text-slate-500">Historical transaction receipts for this passenger account</p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => onNavigateToBookings ? onNavigateToBookings('PAYMENTS') : (onNavigateToProfile && onNavigateToProfile())}
+                  className="text-xs font-extrabold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
+                >
+                  <span>Go to Full Records Section</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {userPaymentRecords.length === 0 ? (
+                <div className="p-6 text-center bg-white rounded-2xl border border-slate-200 text-xs text-slate-500">
+                  Current transaction <strong className="font-mono">{transactionRef}</strong> is recorded.
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {userPaymentRecords.slice(0, 4).map((rec, rIdx) => (
+                    <div
+                      key={rIdx}
+                      className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-[10px]">
+                          ✓
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-slate-900">{rec.transactionRef}</span>
+                            <span className="text-slate-400">•</span>
+                            <span className="font-bold text-blue-600">{rec.flightNumber} ({rec.origin} → {rec.destination})</span>
+                          </div>
+                          <span className="text-[10px] text-slate-400">PNR: {rec.pnr}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <span className="font-mono font-black text-emerald-600 text-sm">${rec.amount}.00</span>
+                        <button
+                          type="button"
+                          onClick={() => setShowReceiptModal(true)}
+                          className="px-2.5 py-1 bg-slate-100 hover:bg-blue-50 text-blue-700 font-bold text-[11px] rounded-lg border border-slate-200 transition cursor-pointer"
+                        >
+                          View Receipt
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Printable E-Ticket Card */}
           <div className="overflow-hidden rounded-[1.75rem] border border-slate-200/80 bg-white shadow-2xl">
@@ -1281,6 +1621,33 @@ export default function PaymentView({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Official Payment Receipt & Tax Invoice Modal */}
+      {showReceiptModal && (
+        <PaymentReceiptModal
+          payment={{
+            transactionReference: transactionRef,
+            amount: totalAmount,
+            paymentMethod: paymentMethod === 'CARD' ? `${cardNetwork} CARD` : paymentMethod,
+            paymentTimestamp: new Date().toISOString()
+          }}
+          reservation={{
+            ...reservationData,
+            pnrCode: reservationData?.pnr || 'SK-784920',
+            userName: cardName || user?.name || 'Valued Passenger',
+            userEmail: otpEmail || user?.email || 'passenger@skylineair.com',
+            totalAmount: totalAmount,
+            baseFlightPrice: baseFare,
+            mealFee: mealFee,
+            extraBaggageFee: baggageFee,
+            hotelPrice: hotelFee,
+            cabinClass: effectiveCabinClass,
+            passengerCount: passengerCount,
+            transactionRef: transactionRef
+          }}
+          onClose={() => setShowReceiptModal(false)}
+        />
       )}
     </div>
   );
