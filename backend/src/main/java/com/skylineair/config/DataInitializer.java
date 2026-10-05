@@ -8,6 +8,8 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+import org.springframework.jdbc.core.JdbcTemplate;
+
 @Component
 public class DataInitializer implements CommandLineRunner {
 
@@ -21,6 +23,7 @@ public class DataInitializer implements CommandLineRunner {
     private final ReservationRepository reservationRepository;
     private final PriceAlertRepository priceAlertRepository;
     private final PaymentRepository paymentRepository;
+    private final JdbcTemplate jdbcTemplate;
 
     public DataInitializer(AirportRepository airportRepository,
                            AircraftRepository aircraftRepository,
@@ -31,7 +34,8 @@ public class DataInitializer implements CommandLineRunner {
                            UserCardRepository userCardRepository,
                            ReservationRepository reservationRepository,
                            PriceAlertRepository priceAlertRepository,
-                           PaymentRepository paymentRepository) {
+                           PaymentRepository paymentRepository,
+                           JdbcTemplate jdbcTemplate) {
         this.airportRepository = airportRepository;
         this.aircraftRepository = aircraftRepository;
         this.flightRepository = flightRepository;
@@ -42,10 +46,24 @@ public class DataInitializer implements CommandLineRunner {
         this.reservationRepository = reservationRepository;
         this.priceAlertRepository = priceAlertRepository;
         this.paymentRepository = paymentRepository;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     @Override
     public void run(String... args) {
+        // Clean up redundant historical columns from payments table if they exist
+        try {
+            jdbcTemplate.execute("ALTER TABLE payments DROP COLUMN IF EXISTS cabin_class");
+            jdbcTemplate.execute("ALTER TABLE payments DROP COLUMN IF EXISTS destination");
+            jdbcTemplate.execute("ALTER TABLE payments DROP COLUMN IF EXISTS flight_number");
+            jdbcTemplate.execute("ALTER TABLE payments DROP COLUMN IF EXISTS origin");
+            jdbcTemplate.execute("ALTER TABLE payments DROP COLUMN IF EXISTS passenger_name");
+            jdbcTemplate.execute("ALTER TABLE payments DROP COLUMN IF EXISTS pnr_code");
+            jdbcTemplate.execute("ALTER TABLE payments DROP COLUMN IF EXISTS seat_number");
+            jdbcTemplate.execute("ALTER TABLE payments DROP COLUMN IF EXISTS user_email");
+        } catch (Exception e) {
+            System.err.println("[DataInitializer] Payments table schema cleanup notice: " + e.getMessage());
+        }
         // Seed Price Alerts
         if (priceAlertRepository.count() == 0) {
             priceAlertRepository.save(new PriceAlert(null, 1L, "alex@skyline.com", "CMB", "Colombo", "SIN", "Singapore", new BigDecimal("320.00"), "ECONOMY", "INSTANT", "ACTIVE", LocalDateTime.now()));

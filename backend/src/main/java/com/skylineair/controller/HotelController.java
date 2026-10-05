@@ -12,7 +12,12 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import com.skylineair.model.Reservation;
+import com.skylineair.patterns.hotel.HotelPackageFactory;
+import com.skylineair.patterns.hotel.HotelStayPackage;
+import com.skylineair.repository.ReservationRepository;
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/hotels")
@@ -21,10 +26,14 @@ public class HotelController {
 
     private final HotelRepository hotelRepository;
     private final HotelBookingRepository hotelBookingRepository;
+    private final ReservationRepository reservationRepository;
 
-    public HotelController(HotelRepository hotelRepository, HotelBookingRepository hotelBookingRepository) {
+    public HotelController(HotelRepository hotelRepository,
+                           HotelBookingRepository hotelBookingRepository,
+                           ReservationRepository reservationRepository) {
         this.hotelRepository = hotelRepository;
         this.hotelBookingRepository = hotelBookingRepository;
+        this.reservationRepository = reservationRepository;
     }
 
     @GetMapping
@@ -162,15 +171,54 @@ public class HotelController {
         }
         booking.setNumberOfNights(nights);
 
-        // Resolve hotelId if missing
+        // Resolve hotel details
+        Hotel targetHotel = null;
         if (booking.getHotelId() == null && booking.getHotelName() != null && !booking.getHotelName().isBlank()) {
-            hotelRepository.findByNameIgnoreCase(booking.getHotelName().trim()).ifPresent(h -> booking.setHotelId(h.getHotelId()));
+            Optional<Hotel> opt = hotelRepository.findByNameIgnoreCase(booking.getHotelName().trim());
+            if (opt.isPresent()) {
+                targetHotel = opt.get();
+                booking.setHotelId(targetHotel.getHotelId());
+            }
+        } else if (booking.getHotelId() != null) {
+            targetHotel = hotelRepository.findById(booking.getHotelId()).orElse(null);
         }
         if (booking.getHotelId() == null) {
-            hotelRepository.findAll().stream().findFirst().ifPresent(h -> {
-                booking.setHotelId(h.getHotelId());
-                if (booking.getHotelName() == null) booking.setHotelName(h.getName());
-            });
+            targetHotel = hotelRepository.findAll().stream().findFirst().orElse(null);
+            if (targetHotel != null) {
+                booking.setHotelId(targetHotel.getHotelId());
+                if (booking.getHotelName() == null) booking.setHotelName(targetHotel.getName());
+            }
+        }
+
+        // Validate Layover duration rule: if Layover >= 8 hours, 100% complimentary stay ($0.00)
+        Optional<Reservation> linkedReservationOpt = Optional.empty();
+        if (booking.getReservationId() != null) {
+            linkedReservationOpt = reservationRepository.findById(booking.getReservationId());
+        }
+        if (linkedReservationOpt.isEmpty() && booking.getPnrCode() != null && !booking.getPnrCode().isBlank()) {
+            linkedReservationOpt = reservationRepository.findByPnrCode(booking.getPnrCode().trim());
+        }
+
+        boolean isComplimentary = Boolean.TRUE.equals(booking.getIsComplimentary());
+        if (linkedReservationOpt.isPresent()) {
+            Reservation res = linkedReservationOpt.get();
+            double layoverHours = res.getLayoverDurationHours() != null ? res.getLayoverDurationHours() : 0.0;
+            int threshold = (targetHotel != null && targetHotel.getComplimentaryThresholdHours() != null)
+                    ? targetHotel.getComplimentaryThresholdHours()
+                    : 8;
+
+            if (Boolean.TRUE.equals(res.getHasLayover()) && layoverHours >= threshold) {
+                isComplimentary = true;
+            }
+        }
+
+        if (isComplimentary) {
+            booking.setIsComplimentary(true);
+            booking.setAmount(BigDecimal.ZERO);
+            HotelStayPackage stayPackage = HotelPackageFactory.createPackage(true, 8.0, targetHotel);
+            if (booking.getVoucherCode() == null || booking.getVoucherCode().isBlank() || booking.getVoucherCode().startsWith("HTV-1") || booking.getVoucherCode().startsWith("HTV-9")) {
+                booking.setVoucherCode(stayPackage.generateVoucherReference(booking.getPnrCode()));
+            }
         }
 
         // If booking already exists for this PNR, update it
@@ -184,19 +232,40 @@ public class HotelController {
                 if (booking.getGuestEmail() != null) b.setGuestEmail(booking.getGuestEmail());
                 if (booking.getPassengerName() != null) b.setPassengerName(booking.getPassengerName());
                 if (booking.getRoomType() != null) b.setRoomType(booking.getRoomType());
-                if (booking.getAmount() != null) b.setAmount(booking.getAmount());
+                b.setAmount(isComplimentary ? BigDecimal.ZERO : booking.getAmount());
                 if (booking.getNumberOfNights() != null) b.setNumberOfNights(booking.getNumberOfNights());
                 if (booking.getCheckInDate() != null) b.setCheckInDate(booking.getCheckInDate());
                 if (booking.getCheckOutDate() != null) b.setCheckOutDate(booking.getCheckOutDate());
-                if (booking.getIsComplimentary() != null) b.setIsComplimentary(booking.getIsComplimentary());
+                b.setIsComplimentary(isComplimentary);
                 if (booking.getVoucherCode() != null) b.setVoucherCode(booking.getVoucherCode());
                 b.setBookingStatus(booking.getBookingStatus() != null ? booking.getBookingStatus() : "CONFIRMED");
                 HotelBooking updated = hotelBookingRepository.save(b);
+
+                // Keep linked reservation synchronized
+                linkedReservationOpt.ifPresent(res -> {
+                    res.setHotelBooked(true);
+                    res.setHotelId(updated.getHotelId());
+                    res.setHotelName(updated.getHotelName());
+                    res.setHotelPrice(updated.getAmount());
+                    res.setHotelVoucherCode(updated.getVoucherCode());
+                    reservationRepository.save(res);
+                });
+
                 return ResponseEntity.ok(updated);
             }
         }
 
         HotelBooking savedBooking = hotelBookingRepository.save(booking);
+
+        // Keep linked reservation synchronized
+        linkedReservationOpt.ifPresent(res -> {
+            res.setHotelBooked(true);
+            res.setHotelId(savedBooking.getHotelId());
+            res.setHotelName(savedBooking.getHotelName());
+            res.setHotelPrice(savedBooking.getAmount());
+            res.setHotelVoucherCode(savedBooking.getVoucherCode());
+            reservationRepository.save(res);
+        });
 
         if (booking.getHotelId() != null) {
             hotelRepository.findById(booking.getHotelId()).ifPresent(hotel -> {

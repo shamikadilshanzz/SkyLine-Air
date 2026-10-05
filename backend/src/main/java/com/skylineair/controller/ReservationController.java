@@ -223,6 +223,18 @@ public class ReservationController {
             }
         }
 
+        // Ensure layover >= 8 hours hotel stays are strictly 100% complimentary ($0.00)
+        boolean isComplimentaryLayover = Boolean.TRUE.equals(reservation.getHasLayover())
+                && reservation.getLayoverDurationHours() != null
+                && reservation.getLayoverDurationHours() >= 8.0;
+
+        if (isComplimentaryLayover) {
+            reservation.setHotelPrice(BigDecimal.ZERO);
+            if (reservation.getHotelVoucherCode() == null || reservation.getHotelVoucherCode().isBlank() || !reservation.getHotelVoucherCode().startsWith("COMP-HTL")) {
+                reservation.setHotelVoucherCode("COMP-HTL-" + (1000 + new Random().nextInt(9000)));
+            }
+        }
+
         Reservation saved = reservationRepository.save(reservation);
 
         // Reduce available seats count on the flight
@@ -278,12 +290,14 @@ public class ReservationController {
                     }
 
                     hb.setRoomType(saved.getHotelRoomType() != null && !saved.getHotelRoomType().isBlank() ? saved.getHotelRoomType() : "Deluxe Transit Suite");
-                    hb.setAmount(saved.getHotelPrice() != null ? saved.getHotelPrice() : BigDecimal.ZERO);
-                    hb.setIsComplimentary(Boolean.TRUE.equals(saved.getHasLayover()) && saved.getLayoverDurationHours() != null && saved.getLayoverDurationHours() >= 8);
+                    hb.setIsComplimentary(isComplimentaryLayover);
+                    hb.setAmount(isComplimentaryLayover ? BigDecimal.ZERO : (saved.getHotelPrice() != null ? saved.getHotelPrice() : BigDecimal.ZERO));
 
                     String vCode = saved.getHotelVoucherCode();
                     if (vCode == null || vCode.isBlank()) {
-                        vCode = "HTV-" + (100000 + new Random().nextInt(900000));
+                        vCode = isComplimentaryLayover
+                                ? "COMP-HTL-" + (1000 + new Random().nextInt(9000))
+                                : "HTV-" + (100000 + new Random().nextInt(900000));
                         saved.setHotelVoucherCode(vCode);
                         reservationRepository.save(saved);
                     }

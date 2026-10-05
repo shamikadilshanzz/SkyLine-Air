@@ -54,7 +54,12 @@ export default function PaymentReceiptModal({ payment, reservation, onClose }) {
   const fuel = 25 * passengerCount;
   const baggageFee = data.extraBaggageFee || 0;
   const mealFee = data.mealFee || 0;
-  const hotelFee = data.hotelPrice || (data.selectedHotel ? (data.selectedHotel.totalPrice || 120) : 0);
+  const isComplimentaryHotel = Boolean(
+    data.isComplimentaryHotel ||
+    data.selectedHotel?.isComplimentary ||
+    ((data.hasLayover || data.flight?.hasLayover) && Number(data.layoverDurationHours || data.flight?.layoverDurationHours || 0) >= 8)
+  );
+  const hotelFee = isComplimentaryHotel ? 0 : (data.hotelPrice || (data.selectedHotel ? (data.selectedHotel.totalPrice || 120) : 0));
 
   const handleCopyTxn = () => {
     navigator.clipboard?.writeText(txnRef);
@@ -269,15 +274,24 @@ export default function PaymentReceiptModal({ payment, reservation, onClose }) {
                     </tr>
                   )}
 
-                  {hotelFee > 0 && (
+                  {(hotelFee > 0 || isComplimentaryHotel || data.hotelBooked || data.selectedHotel) && (
                     <tr>
                       <td className="p-3">
-                        <span className="font-bold text-slate-900 block">Partner Transit Hotel Accommodation</span>
-                        <span className="text-[10px] text-slate-500">{data.selectedHotel?.name || 'Airport Hotel Stay'}</span>
+                        <span className="font-bold text-slate-900 flex items-center gap-1.5">
+                          Partner Transit Hotel Accommodation
+                          {isComplimentaryHotel && (
+                            <span className="text-[9px] bg-emerald-100 text-emerald-800 font-extrabold px-1.5 py-0.5 rounded">
+                              100% COMPLIMENTARY
+                            </span>
+                          )}
+                        </span>
+                        <span className="text-[10px] text-slate-500">{data.selectedHotel?.name || data.hotelName || 'Airport Transit Hotel'}</span>
                       </td>
                       <td className="p-3 text-center font-semibold">1</td>
-                      <td className="p-3 text-right font-mono">${hotelFee}.00</td>
-                      <td className="p-3 text-right font-mono font-bold text-slate-900">+${hotelFee}.00</td>
+                      <td className="p-3 text-right font-mono">{isComplimentaryHotel ? '$0.00' : `$${hotelFee}.00`}</td>
+                      <td className={`p-3 text-right font-mono font-bold ${isComplimentaryHotel ? 'text-emerald-600' : 'text-slate-900'}`}>
+                        {isComplimentaryHotel ? 'FREE ($0.00)' : `+$${hotelFee}.00`}
+                      </td>
                     </tr>
                   )}
                 </tbody>

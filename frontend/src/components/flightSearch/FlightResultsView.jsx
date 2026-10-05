@@ -118,7 +118,13 @@ export default function FlightResultsView({ flights = INITIAL_FLIGHTS, searchCri
             </div>
 
             <p className="mt-4 text-sm text-blue-100/80">
-              {formatDate(searchCriteria?.departDate || '2026-09-10')}
+              {formatDate(searchCriteria?.departDate || new Date().toISOString().slice(0, 10))}
+              {searchCriteria?.tripType === 'roundtrip' && searchCriteria?.returnDate && (
+                <>
+                  <span className="mx-1.5 text-white/40">→</span>
+                  {formatDate(searchCriteria.returnDate)}
+                </>
+              )}
               <span className="mx-2 text-white/30">|</span>
               {searchCriteria?.passengers || 1} {(searchCriteria?.passengers || 1) === 1 ? 'passenger' : 'passengers'}
             </p>

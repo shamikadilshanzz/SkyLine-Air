@@ -170,9 +170,12 @@ export default function LayoverHotelView({ currentRole, user, onOpenAuth }) {
   const hotelStayPricing = (hotel) => {
     if (!hotel) return { complimentary: false, discounted: false, amount: 0 };
     const isMatchingAirport = Boolean(
-      hasLayover &&
-      currentReservation?.layoverAirport &&
-      hotel.airportCode?.toUpperCase() === currentReservation.layoverAirport?.toUpperCase()
+      hasLayover && (
+        !currentReservation?.layoverAirport ||
+        !hotel.airportCode ||
+        hotel.airportCode?.toUpperCase() === currentReservation.layoverAirport?.toUpperCase() ||
+        (hotel.city && currentReservation.layoverCity && hotel.city.toLowerCase() === currentReservation.layoverCity.toLowerCase())
+      )
     );
     const threshold = Number(hotel.complimentaryThresholdHours) || 8;
     const complimentary = isMatchingAirport && Number(currentReservation?.layoverDurationHours || 0) >= threshold;
@@ -193,7 +196,9 @@ export default function LayoverHotelView({ currentRole, user, onOpenAuth }) {
     setBookingError('');
 
     const pricing = hotelStayPricing(hotel);
-    const voucher = `HTV-${Math.floor(100000 + Math.random() * 900000)}`;
+    const voucher = pricing.complimentary
+      ? `COMP-HTL-${Math.floor(1000 + Math.random() * 9000)}`
+      : `HTV-${Math.floor(100000 + Math.random() * 900000)}`;
     const independentPnr = `IND-${Math.floor(100000 + Math.random() * 900000)}`.slice(0, 10);
     const linkedPnr = currentReservation?.pnr || independentPnr;
     const passengerName = user.name;
