@@ -3,9 +3,6 @@ package com.skylineair.patterns.hotel;
 import com.skylineair.model.Hotel;
 import java.math.BigDecimal;
 
-/**
- * Concrete Product 3: Standard Independent Hotel Booking
- */
 public class StandardStayPackage implements HotelStayPackage {
 
     @Override

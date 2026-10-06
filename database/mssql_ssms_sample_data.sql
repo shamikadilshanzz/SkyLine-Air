@@ -32,14 +32,15 @@ SET IDENTITY_INSERT dbo.aircraft OFF;
 GO
 
 -- ----------------------------------------------------------------------------
+-- ----------------------------------------------------------------------------
 -- 3. Users (6 records covering ISA Subtypes: Passenger, Officer, Admin, Hotel Mgr)
 -- ----------------------------------------------------------------------------
 SET IDENTITY_INSERT dbo.users ON;
 INSERT INTO dbo.users (user_id, email, password_hash, phone_number, role, frequent_flyer_number, loyalty_points, loyalty_tier, title, first_name, last_name, nationality, country, city, address, postal_code, passport_number, passport_issuing_country) VALUES
 (1, 'alex@skyline.com', 'passenger123', '+1 555-0192', 'PASSENGER', 'SK-99482', 4500, 'Gold VIP', 'Mr', 'Alex', 'Morgan', 'USA', 'USA', 'New York', '120 Broadway, Suite 1400', '10005', 'N9849201', 'USA'),
-(2, 'officer@skyline.com', 'officer123', '+94 77 123 4567', 'TICKETING_OFFICER', NULL, 0, 'Staff Tier', 'Ms', 'Samira', 'Khan', 'Sri Lanka', 'Sri Lanka', 'Colombo', '45 Galle Road', '00300', 'N8829102', 'Sri Lanka'),
-(3, 'admin@skyline.com', 'admin123', '+1 800-SKY-ADMIN', 'ADMIN', NULL, 0, 'Airline Admin', 'Mr', 'David', 'Vance', 'USA', 'USA', 'Chicago', '300 N Michigan Ave', '60601', 'N1192842', 'USA'),
-(4, 'hotel@skyline.com', 'hotel123', '+971 4 888 9999', 'HOTEL_MANAGER', NULL, 0, 'Hotel Partner', 'Ms', 'Elena', 'Rostova', 'UAE', 'UAE', 'Dubai', 'Downtown Sheikh Zayed Rd', '00000', 'N4481029', 'UAE'),
+(2, 'officer@skyline.com', 'officer123', '+94 77 123 4567', 'TICKETING_OFFICER', 'ST-OFF-101', 0, 'Staff Tier', 'Ms', 'Samira', 'Khan', 'Sri Lanka', 'Sri Lanka', 'Colombo', '45 Galle Road', '00300', 'N8829102', 'Sri Lanka'),
+(3, 'admin@skyline.com', 'admin123', '+1 800-SKY-ADMIN', 'ADMIN', 'ST-ADM-001', 0, 'Airline Admin', 'Mr', 'David', 'Vance', 'USA', 'USA', 'Chicago', '300 N Michigan Ave', '60601', 'N1192842', 'USA'),
+(4, 'hotel@skyline.com', 'hotel123', '+971 4 888 9999', 'HOTEL_MANAGER', 'HT-MGR-501', 0, 'Hotel Partner', 'Ms', 'Elena', 'Rostova', 'UAE', 'UAE', 'Dubai', 'Downtown Sheikh Zayed Rd', '00000', 'N4481029', 'UAE'),
 (5, 'sarah.jenkins@skyline.com', 'passenger123', '+44 20 7946 0912', 'PASSENGER', 'SL-8849201', 2800, 'Silver Elite', 'Ms', 'Sarah', 'Jenkins', 'British', 'United Kingdom', 'London', '14 Oxford St', 'W1D 1BS', 'P3849102', 'United Kingdom'),
 (6, 'chaminda.perera@skyline.com', 'passenger123', '+94 71 888 2345', 'PASSENGER', 'SL-7729103', 1200, 'Blue Standard', 'Mr', 'Chaminda', 'Perera', 'Sri Lankan', 'Sri Lanka', 'Kandy', '12 Peradeniya Road', '20000', 'N5528190', 'Sri Lanka');
 SET IDENTITY_INSERT dbo.users OFF;
@@ -49,12 +50,12 @@ GO
 -- 4. Saved Payment Cards (5 records)
 -- ----------------------------------------------------------------------------
 SET IDENTITY_INSERT dbo.user_cards ON;
-INSERT INTO dbo.user_cards (card_id, user_id, card_type, card_holder, card_number_masked, last4, expiry, cvv, is_default) VALUES
-(1, 1, 'Visa', 'Alex Morgan', '•••• •••• •••• 4242', '4242', '12/28', '382', 1),
-(2, 1, 'Mastercard', 'Alex Morgan', '•••• •••• •••• 8819', '8819', '09/27', '912', 0),
-(3, 5, 'Visa', 'Sarah Jenkins', '•••• •••• •••• 1144', '1144', '04/29', '455', 1),
-(4, 6, 'Mastercard', 'Chaminda Perera', '•••• •••• •••• 5590', '5590', '11/26', '129', 1),
-(5, 5, 'Amex', 'Sarah Jenkins', '•••• •••••• •3005', '3005', '08/28', '8910', 0);
+INSERT INTO dbo.user_cards (card_id, user_id, card_type, card_holder, card_number_masked, last4, expiry, cvv, is_default, created_at) VALUES
+(1, 1, 'Visa', 'Alex Morgan', '•••• •••• •••• 4242', '4242', '12/28', '382', 1, '2026-09-01 10:00:00'),
+(2, 1, 'Mastercard', 'Alex Morgan', '•••• •••• •••• 8819', '8819', '09/27', '912', 0, '2026-09-05 14:30:00'),
+(3, 5, 'Visa', 'Sarah Jenkins', '•••• •••• •••• 1144', '1144', '04/29', '455', 1, '2026-09-10 09:15:00'),
+(4, 6, 'Mastercard', 'Chaminda Perera', '•••• •••• •••• 5590', '5590', '11/26', '129', 1, '2026-09-12 16:45:00'),
+(5, 5, 'Amex', 'Sarah Jenkins', '•••• •••••• •3005', '3005', '08/28', '8910', 0, '2026-09-15 11:20:00');
 SET IDENTITY_INSERT dbo.user_cards OFF;
 GO
 
@@ -62,12 +63,12 @@ GO
 -- 5. Flight Schedules (5 records)
 -- ----------------------------------------------------------------------------
 SET IDENTITY_INSERT dbo.flights ON;
-INSERT INTO dbo.flights (flight_id, flight_number, origin_code, destination_code, origin_city, destination_city, departure_time, arrival_time, duration, stops, has_layover, aircraft_id, aircraft_model, tail_number, base_price_economy, base_price_business, base_price_first, total_seats, available_seats, status, image) VALUES
-(1, 'SL-101', 'CMB', 'SIN', 'Colombo', 'Singapore', '2026-09-25 08:30:00', '2026-09-25 15:00:00', '4h 00m', 0, 0, 1, 'Boeing 787-9 Dreamliner', '4R-SLA', 350.00, 850.00, 1500.00, 48, 42, 'ON_TIME', 'https://cdn.phototourl.com/free/2026-08-30-e4fac5db-76e3-445a-b51c-5af0d4fe8c97.png'),
-(2, 'SL-204', 'CMB', 'LHR', 'Colombo', 'London', '2026-09-27 10:15:00', '2026-09-27 22:45:00', '15h 00m', 1, 1, 2, 'Airbus A350-900', '4R-SLB', 780.00, 1890.00, 3400.00, 60, 18, 'ON_TIME', 'https://cdn.phototourl.com/free/2026-08-30-9105feb9-f5b9-439f-a9bc-659511f337a3.png'),
-(3, 'SL-308', 'CMB', 'DXB', 'Colombo', 'Dubai', '2026-09-23 14:20:00', '2026-09-23 17:35:00', '4h 45m', 0, 0, 3, 'Boeing 777-300ER', '4R-SLC', 480.00, 1100.00, 2100.00, 36, 29, 'ON_TIME', 'https://cdn.phototourl.com/free/2026-08-30-ded93e81-f57b-47a7-8b0c-d3a26a6b27d5.png'),
-(4, 'SL-415', 'DXB', 'JFK', 'Dubai', 'New York', '2026-09-24 02:30:00', '2026-09-24 08:45:00', '14h 15m', 0, 0, 3, 'Boeing 777-300ER', '4R-SLC', 920.00, 2400.00, 4200.00, 60, 22, 'ON_TIME', 'https://images.unsplash.com/photo-1519074069444-1ba4eff56022?auto=format&fit=crop&w=800&q=80'),
-(5, 'SL-520', 'CMB', 'HND', 'Colombo', 'Tokyo', '2026-09-26 23:15:00', '2026-09-27 09:30:00', '8h 45m', 0, 0, 1, 'Boeing 787-9 Dreamliner', '4R-SLA', 650.00, 1600.00, 2900.00, 48, 31, 'ON_TIME', 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?auto=format&fit=crop&w=800&q=80');
+INSERT INTO dbo.flights (flight_id, flight_number, origin_code, destination_code, origin_city, destination_city, departure_time, arrival_time, duration, stops, has_layover, layover_airport, layover_city, layover_duration_hours, aircraft_id, aircraft_model, tail_number, base_price_economy, base_price_business, base_price_first, total_seats, available_seats, status, image) VALUES
+(1, 'SL-101', 'CMB', 'SIN', 'Colombo', 'Singapore', '2026-09-25 08:30:00', '2026-09-25 15:00:00', '4h 00m', 0, 0, 'SIN', 'None (Direct)', 0.0, 1, 'Boeing 787-9 Dreamliner', '4R-SLA', 350.00, 850.00, 1500.00, 48, 42, 'ON_TIME', 'https://cdn.phototourl.com/free/2026-08-30-e4fac5db-76e3-445a-b51c-5af0d4fe8c97.png'),
+(2, 'SL-204', 'CMB', 'LHR', 'Colombo', 'London', '2026-09-27 10:15:00', '2026-09-27 22:45:00', '15h 00m', 1, 1, 'DXB', 'Dubai', 3.5, 2, 'Airbus A350-900', '4R-SLB', 780.00, 1890.00, 3400.00, 60, 18, 'ON_TIME', 'https://cdn.phototourl.com/free/2026-08-30-9105feb9-f5b9-439f-a9bc-659511f337a3.png'),
+(3, 'SL-308', 'CMB', 'DXB', 'Colombo', 'Dubai', '2026-09-23 14:20:00', '2026-09-23 17:35:00', '4h 45m', 0, 0, 'DXB', 'None (Direct)', 0.0, 3, 'Boeing 777-300ER', '4R-SLC', 480.00, 1100.00, 2100.00, 36, 29, 'ON_TIME', 'https://cdn.phototourl.com/free/2026-08-30-ded93e81-f57b-47a7-8b0c-d3a26a6b27d5.png'),
+(4, 'SL-415', 'DXB', 'JFK', 'Dubai', 'New York', '2026-09-24 02:30:00', '2026-09-24 16:45:00', '14h 15m', 0, 0, 'JFK', 'None (Direct)', 0.0, 3, 'Boeing 777-300ER', '4R-SLC', 920.00, 2400.00, 4200.00, 60, 22, 'ON_TIME', 'https://images.unsplash.com/photo-1519074069444-1ba4eff56022?auto=format&fit=crop&w=800&q=80'),
+(5, 'SL-520', 'CMB', 'HND', 'Colombo', 'Tokyo', '2026-09-26 23:15:00', '2026-09-27 09:30:00', '8h 45m', 0, 0, 'HND', 'None (Direct)', 0.0, 1, 'Boeing 787-9 Dreamliner', '4R-SLA', 650.00, 1600.00, 2900.00, 48, 31, 'ON_TIME', 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?auto=format&fit=crop&w=800&q=80');
 SET IDENTITY_INSERT dbo.flights OFF;
 GO
 
@@ -91,11 +92,11 @@ GO
 -- ----------------------------------------------------------------------------
 SET IDENTITY_INSERT dbo.reservations ON;
 INSERT INTO dbo.reservations (reservation_id, pnr_code, user_id, user_name, user_email, flight_id, flight_number, origin, destination, departure_time, cabin_class, total_amount, booking_status, payment_status, payment_method, transaction_ref, has_layover, hotel_booked, hotel_id, hotel_name, hotel_city, hotel_price) VALUES
-(1, 'SK-991201', 1, 'Alex Morgan', 'alex@skyline.com', 1, 'SL-101', 'Colombo', 'Singapore', '2026-09-25 08:30:00', 'ECONOMY', 350.00, 'CONFIRMED', 'PAID', 'CREDIT_CARD', 'TXN-9938102938', 0, 0, NULL, NULL, NULL, 0.00),
+(1, 'SK-991201', 1, 'Alex Morgan', 'alex@skyline.com', 1, 'SL-101', 'Colombo', 'Singapore', '2026-09-25 08:30:00', 'ECONOMY', 350.00, 'CONFIRMED', 'PAID', 'CREDIT_CARD', 'TXN-9938102938', 0, 1, 2, 'Transit Grand Luxury Hotel', 'Singapore', 0.00),
 (2, 'SK-991202', 1, 'Alex Morgan', 'alex@skyline.com', 2, 'SL-204', 'Colombo', 'London', '2026-09-27 10:15:00', 'BUSINESS', 1890.00, 'CONFIRMED', 'PAID', 'PAYPAL', 'TXN-4491029911', 1, 1, 3, 'Heathrow Crown Plaza & Suites', 'London', 160.00),
 (3, 'SK-991203', 5, 'Sarah Jenkins', 'sarah.jenkins@skyline.com', 3, 'SL-308', 'Colombo', 'Dubai', '2026-09-23 14:20:00', 'ECONOMY', 480.00, 'CONFIRMED', 'PAID', 'CREDIT_CARD', 'TXN-7718293012', 0, 1, 1, 'SkyHaven Airport Resort & Spa', 'Dubai', 0.00),
-(4, 'SK-991204', 6, 'Chaminda Perera', 'chaminda.perera@skyline.com', 4, 'SL-415', 'Dubai', 'New York', '2026-09-24 02:30:00', 'FIRST', 4200.00, 'CANCELLED', 'REFUNDED', 'CREDIT_CARD', 'TXN-8829104812', 0, 0, NULL, NULL, NULL, 0.00),
-(5, 'SK-991205', 5, 'Sarah Jenkins', 'sarah.jenkins@skyline.com', 5, 'SL-520', 'Colombo', 'Tokyo', '2026-09-26 23:15:00', 'BUSINESS', 1600.00, 'PENDING_PAYMENT', 'PENDING', 'CREDIT_CARD', 'TXN-1192837465', 0, 0, NULL, NULL, NULL, 0.00);
+(4, 'SK-991204', 6, 'Chaminda Perera', 'chaminda.perera@skyline.com', 4, 'SL-415', 'Dubai', 'New York', '2026-09-24 02:30:00', 'FIRST', 4200.00, 'CANCELLED', 'REFUNDED', 'CREDIT_CARD', 'TXN-8829104812', 0, 1, 4, 'TWA Hotel at JFK Airport', 'New York', 195.00),
+(5, 'SK-991205', 5, 'Sarah Jenkins', 'sarah.jenkins@skyline.com', 5, 'SL-520', 'Colombo', 'Tokyo', '2026-09-26 23:15:00', 'BUSINESS', 1600.00, 'PENDING_PAYMENT', 'PENDING', 'CREDIT_CARD', 'TXN-1192837465', 0, 1, 5, 'Haneda SkySuites Transit Hotel', 'Tokyo', 110.00);
 SET IDENTITY_INSERT dbo.reservations OFF;
 GO
 
@@ -127,12 +128,12 @@ GO
 -- 10. Ticket Cancellations & Refunds (5 records)
 -- ----------------------------------------------------------------------------
 SET IDENTITY_INSERT dbo.refund_requests ON;
-INSERT INTO dbo.refund_requests (refund_id, refund_reference, pnr, reservation_id, user_name, user_email, flight_number, original_fare, cancellation_fee, refund_amount, reason, status) VALUES
-(1, 'RF-88391', 'SK-991204', 4, 'Chaminda Perera', 'chaminda.perera@skyline.com', 'SL-415', 4200.00, 300.00, 3900.00, 'Personal schedule change', 'APPROVED'),
-(2, 'RF-88392', 'SK-991201', 1, 'Alex Morgan', 'alex@skyline.com', 'SL-101', 350.00, 50.00, 300.00, 'Medical emergency', 'REJECTED'),
-(3, 'RF-88393', 'SK-991202', 2, 'Alex Morgan', 'alex@skyline.com', 'SL-204', 1890.00, 150.00, 1740.00, 'Visa issuance delay', 'PENDING'),
-(4, 'RF-88394', 'SK-991203', 3, 'Sarah Jenkins', 'sarah.jenkins@skyline.com', 'SL-308', 480.00, 50.00, 430.00, 'Flight time rescheduled by passenger', 'APPROVED'),
-(5, 'RF-88395', 'SK-991205', 5, 'Sarah Jenkins', 'sarah.jenkins@skyline.com', 'SL-520', 1600.00, 100.00, 1500.00, 'Duplicate booking made by error', 'PENDING');
+INSERT INTO dbo.refund_requests (refund_id, refund_reference, pnr, reservation_id, user_name, user_email, flight_number, original_fare, cancellation_fee, refund_amount, reason, status, requested_date, processed_at) VALUES
+(1, 'RF-88391', 'SK-991204', 4, 'Chaminda Perera', 'chaminda.perera@skyline.com', 'SL-415', 4200.00, 300.00, 3900.00, 'Personal schedule change', 'APPROVED', '2026-09-24 08:15:00', '2026-09-24 10:30:00'),
+(2, 'RF-88392', 'SK-991201', 1, 'Alex Morgan', 'alex@skyline.com', 'SL-101', 350.00, 50.00, 300.00, 'Medical emergency', 'REJECTED', '2026-09-25 09:40:00', '2026-09-25 11:15:00'),
+(3, 'RF-88393', 'SK-991202', 2, 'Alex Morgan', 'alex@skyline.com', 'SL-204', 1890.00, 150.00, 1740.00, 'Visa issuance delay', 'PENDING', '2026-09-27 12:00:00', NULL),
+(4, 'RF-88394', 'SK-991203', 3, 'Sarah Jenkins', 'sarah.jenkins@skyline.com', 'SL-308', 480.00, 50.00, 430.00, 'Flight time rescheduled by passenger', 'APPROVED', '2026-09-23 16:30:00', '2026-09-23 17:45:00'),
+(5, 'RF-88395', 'SK-991205', 5, 'Sarah Jenkins', 'sarah.jenkins@skyline.com', 'SL-520', 1600.00, 100.00, 1500.00, 'Duplicate booking made by error', 'PENDING', '2026-09-26 14:10:00', NULL);
 SET IDENTITY_INSERT dbo.refund_requests OFF;
 GO
 

@@ -8,6 +8,8 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+import org.springframework.jdbc.core.JdbcTemplate;
+
 @Component
 public class DataInitializer implements CommandLineRunner {
 
@@ -21,6 +23,7 @@ public class DataInitializer implements CommandLineRunner {
     private final ReservationRepository reservationRepository;
     private final PriceAlertRepository priceAlertRepository;
     private final PaymentRepository paymentRepository;
+    private final JdbcTemplate jdbcTemplate;
 
     public DataInitializer(AirportRepository airportRepository,
                            AircraftRepository aircraftRepository,
@@ -31,7 +34,8 @@ public class DataInitializer implements CommandLineRunner {
                            UserCardRepository userCardRepository,
                            ReservationRepository reservationRepository,
                            PriceAlertRepository priceAlertRepository,
-                           PaymentRepository paymentRepository) {
+                           PaymentRepository paymentRepository,
+                           JdbcTemplate jdbcTemplate) {
         this.airportRepository = airportRepository;
         this.aircraftRepository = aircraftRepository;
         this.flightRepository = flightRepository;
@@ -42,10 +46,24 @@ public class DataInitializer implements CommandLineRunner {
         this.reservationRepository = reservationRepository;
         this.priceAlertRepository = priceAlertRepository;
         this.paymentRepository = paymentRepository;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     @Override
     public void run(String... args) {
+        // Clean up redundant historical columns from payments table if they exist
+        try {
+            jdbcTemplate.execute("ALTER TABLE payments DROP COLUMN IF EXISTS cabin_class");
+            jdbcTemplate.execute("ALTER TABLE payments DROP COLUMN IF EXISTS destination");
+            jdbcTemplate.execute("ALTER TABLE payments DROP COLUMN IF EXISTS flight_number");
+            jdbcTemplate.execute("ALTER TABLE payments DROP COLUMN IF EXISTS origin");
+            jdbcTemplate.execute("ALTER TABLE payments DROP COLUMN IF EXISTS passenger_name");
+            jdbcTemplate.execute("ALTER TABLE payments DROP COLUMN IF EXISTS pnr_code");
+            jdbcTemplate.execute("ALTER TABLE payments DROP COLUMN IF EXISTS seat_number");
+            jdbcTemplate.execute("ALTER TABLE payments DROP COLUMN IF EXISTS user_email");
+        } catch (Exception e) {
+            System.err.println("[DataInitializer] Payments table schema cleanup notice: " + e.getMessage());
+        }
         // Seed Price Alerts
         if (priceAlertRepository.count() == 0) {
             priceAlertRepository.save(new PriceAlert(null, 1L, "alex@skyline.com", "CMB", "Colombo", "SIN", "Singapore", new BigDecimal("320.00"), "ECONOMY", "INSTANT", "ACTIVE", LocalDateTime.now()));
@@ -421,30 +439,96 @@ public class DataInitializer implements CommandLineRunner {
             RefundRequest rr = new RefundRequest();
             rr.setRefundReference("RF-88391");
             rr.setPnr("SK-991204");
-            rr.setUserName("Daniel Vance");
-            rr.setUserEmail("daniel@example.com");
-            rr.setFlightNumber("SL-308");
-            rr.setOriginalFare(new BigDecimal("480.00"));
-            rr.setCancellationFee(new BigDecimal("80.00"));
-            rr.setRefundAmount(new BigDecimal("400.00"));
+            rr.setUserName("Chaminda Perera");
+            rr.setUserEmail("chaminda.perera@skyline.com");
+            rr.setFlightNumber("SL-415");
+            rr.setOriginalFare(new BigDecimal("4200.00"));
+            rr.setCancellationFee(new BigDecimal("300.00"));
+            rr.setRefundAmount(new BigDecimal("3900.00"));
             rr.setReason("Personal schedule change");
             rr.setStatus("APPROVED");
+            rr.setRequestedDate(LocalDateTime.parse("2026-09-24T08:15:00"));
+            rr.setProcessedAt(LocalDateTime.parse("2026-09-24T10:30:00"));
             refundRequestRepository.save(rr);
         }
+
+        // Backfill null requestedDate and processedAt in existing refund records
+        refundRequestRepository.findAll().forEach(rr -> {
+            boolean changed = false;
+            if (rr.getRequestedDate() == null) {
+                if ("RF-88391".equals(rr.getRefundReference())) {
+                    rr.setRequestedDate(LocalDateTime.parse("2026-09-24T08:15:00"));
+                } else if ("RF-88392".equals(rr.getRefundReference())) {
+                    rr.setRequestedDate(LocalDateTime.parse("2026-09-25T09:40:00"));
+                } else if ("RF-88393".equals(rr.getRefundReference())) {
+                    rr.setRequestedDate(LocalDateTime.parse("2026-09-27T12:00:00"));
+                } else if ("RF-88394".equals(rr.getRefundReference())) {
+                    rr.setRequestedDate(LocalDateTime.parse("2026-09-23T16:30:00"));
+                } else if ("RF-88395".equals(rr.getRefundReference())) {
+                    rr.setRequestedDate(LocalDateTime.parse("2026-09-26T14:10:00"));
+                } else {
+                    rr.setRequestedDate(LocalDateTime.now().minusDays(1));
+                }
+                changed = true;
+            }
+            if (("APPROVED".equalsIgnoreCase(rr.getStatus()) || "REJECTED".equalsIgnoreCase(rr.getStatus())) && rr.getProcessedAt() == null) {
+                rr.setProcessedAt(rr.getRequestedDate() != null ? rr.getRequestedDate().plusHours(2) : LocalDateTime.now());
+                changed = true;
+            }
+            if (changed) {
+                refundRequestRepository.save(rr);
+            }
+        });
 
         // Seed User Cards
         if (userCardRepository.count() == 0) {
             userRepository.findByEmail("alex.morgan@skyline.com").ifPresent(user -> {
-                UserCard c1 = new UserCard(null, user.getUserId(), "Visa", "Alex Morgan", "•••• •••• •••• 4242", "4242", "12/28", "382", true, LocalDateTime.now());
-                UserCard c2 = new UserCard(null, user.getUserId(), "Mastercard", "Alex Morgan", "•••• •••• •••• 8819", "8819", "09/27", "912", false, LocalDateTime.now());
+                UserCard c1 = new UserCard(null, user.getUserId(), "Visa", "Alex Morgan", "•••• •••• •••• 4242", "4242", "12/28", "382", true, LocalDateTime.parse("2026-09-01T10:00:00"));
+                UserCard c2 = new UserCard(null, user.getUserId(), "Mastercard", "Alex Morgan", "•••• •••• •••• 8819", "8819", "09/27", "912", false, LocalDateTime.parse("2026-09-05T14:30:00"));
                 userCardRepository.save(c1);
                 userCardRepository.save(c2);
             });
-            userRepository.findByEmail("passenger@skyline.com").ifPresent(user -> {
-                UserCard c1 = new UserCard(null, user.getUserId(), "Visa", "Alex Morgan", "•••• •••• •••• 4242", "4242", "12/28", "382", true, LocalDateTime.now());
-                userCardRepository.save(c1);
+            userRepository.findByEmail("sarah.jenkins@skyline.com").ifPresent(user -> {
+                UserCard c3 = new UserCard(null, user.getUserId(), "Visa", "Sarah Jenkins", "•••• •••• •••• 1144", "1144", "04/29", "455", true, LocalDateTime.parse("2026-09-10T09:15:00"));
+                UserCard c5 = new UserCard(null, user.getUserId(), "Amex", "Sarah Jenkins", "•••• •••••• •3005", "3005", "08/28", "8910", false, LocalDateTime.parse("2026-09-15T11:20:00"));
+                userCardRepository.save(c3);
+                userCardRepository.save(c5);
+            });
+            userRepository.findByEmail("chaminda.perera@skyline.com").ifPresent(user -> {
+                UserCard c4 = new UserCard(null, user.getUserId(), "Mastercard", "Chaminda Perera", "•••• •••• •••• 5590", "5590", "11/26", "129", true, LocalDateTime.parse("2026-09-12T16:45:00"));
+                userCardRepository.save(c4);
             });
         }
+
+        // Backfill and clean up user cards
+        userCardRepository.findAll().forEach(card -> {
+            boolean changed = false;
+            if (card.getCreatedAt() == null) {
+                card.setCreatedAt(LocalDateTime.now().minusDays(5));
+                changed = true;
+            }
+            if (card.getCardNumberMasked() != null && card.getCardNumberMasked().contains("â")) {
+                if ("Amex".equalsIgnoreCase(card.getCardType())) {
+                    card.setCardNumberMasked("•••• •••••• •" + card.getLast4());
+                } else {
+                    card.setCardNumberMasked("•••• •••• •••• " + card.getLast4());
+                }
+                changed = true;
+            }
+            if (card.getCardId() != null && card.getCardId() == 3L && card.getUserId() != null && card.getUserId() == 5L) {
+                if ("Alex Morgan".equals(card.getCardHolder())) {
+                    card.setCardHolder("Sarah Jenkins");
+                    card.setLast4("1144");
+                    card.setExpiry("04/29");
+                    card.setCvv("455");
+                    card.setCardNumberMasked("•••• •••• •••• 1144");
+                    changed = true;
+                }
+            }
+            if (changed) {
+                userCardRepository.save(card);
+            }
+        });
 
         // Seed Reservations & Payments Table
         if (reservationRepository.count() == 0) {
@@ -482,6 +566,16 @@ public class DataInitializer implements CommandLineRunner {
                         }
                     });
         }
+
+        // Ensure all refund requests have reservationId properly linked with reservations
+        refundRequestRepository.findAll().stream()
+                .filter(rf -> rf.getReservationId() == null && rf.getPnr() != null && !rf.getPnr().isBlank())
+                .forEach(rf -> {
+                    reservationRepository.findByPnrCode(rf.getPnr().trim()).ifPresent(res -> {
+                        rf.setReservationId(res.getReservationId());
+                        refundRequestRepository.save(rf);
+                    });
+                });
 
         System.out.println("✅ DataInitializer: Database successfully seeded with default Airports, Aircraft, Users, Flights, Hotels, Payments, and Refunds!");
     }

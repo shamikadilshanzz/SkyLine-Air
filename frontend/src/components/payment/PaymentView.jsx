@@ -279,10 +279,17 @@ export default function PaymentView({
   const fuelSurcharge = 25 * passengerCount;
   const baggageFee = reservationData?.extraBaggageFee || 0;
   const mealFee = reservationData?.mealFee || reservationData?.passenger?.mealDetails?.price || 0;
-  const hotelFee = reservationData?.hotelPrice || reservationData?.selectedHotel?.totalPrice || 0;
+
+  const flightHasComplimentaryLayover = Boolean(
+    (reservationData?.flight?.hasLayover || reservationData?.hasLayover) &&
+    Number(reservationData?.flight?.layoverDurationHours || reservationData?.layoverDurationHours || 0) >= 8
+  );
+  const isComplimentaryStay = Boolean(reservationData?.isComplimentaryHotel || reservationData?.selectedHotel?.isComplimentary || flightHasComplimentaryLayover);
+  const hotelFee = isComplimentaryStay ? 0 : (reservationData?.hotelPrice || reservationData?.selectedHotel?.totalPrice || 0);
+
   const pointsDiscount = usePoints ? 50 : 0;
   const totalAmount = reservationData?.totalAmount
-    ? Math.max(0, reservationData.totalAmount - discountAmount - pointsDiscount)
+    ? Math.max(0, (isComplimentaryStay ? reservationData.totalAmount - (reservationData.hotelPrice || 0) : reservationData.totalAmount) - discountAmount - pointsDiscount)
     : Math.max(0, baseFare + taxesFees + fuelSurcharge + baggageFee + mealFee + hotelFee - discountAmount - pointsDiscount);
 
   const handleApplyDiscount = () => {
@@ -446,7 +453,10 @@ export default function PaymentView({
             || cardName
             || 'Alex Morgan';
 
-          const voucher = reservationData?.selectedHotel?.voucherCode || reservationData?.hotelVoucherCode || resRecord?.hotelVoucherCode || `HTV-${Math.floor(100000 + Math.random() * 900000)}`;
+          const defaultComplimentaryVoucher = `COMP-HTL-${Math.floor(1000 + Math.random() * 9000)}`;
+          const voucher = isComplimentaryStay
+            ? (reservationData?.selectedHotel?.voucherCode || reservationData?.hotelVoucherCode || resRecord?.hotelVoucherCode || defaultComplimentaryVoucher)
+            : (reservationData?.selectedHotel?.voucherCode || reservationData?.hotelVoucherCode || resRecord?.hotelVoucherCode || `HTV-${Math.floor(100000 + Math.random() * 900000)}`);
 
           await bookHotelApi({
             hotelId: hotelIdVal,
@@ -461,8 +471,8 @@ export default function PaymentView({
             numberOfNights: nightsCount,
             checkInDate: checkIn,
             checkOutDate: checkOut,
-            isComplimentary: Boolean(reservationData?.flight?.hasLayover && (reservationData?.flight?.layoverDurationHours >= 8)),
-            amount: hotelFee || reservationData.selectedHotel.totalPrice || reservationData.selectedHotel.pricePerNight || 0,
+            isComplimentary: isComplimentaryStay,
+            amount: isComplimentaryStay ? 0 : (hotelFee || reservationData.selectedHotel.totalPrice || reservationData.selectedHotel.pricePerNight || 0),
             bookingStatus: 'CONFIRMED'
           });
         } catch (hErr) {
@@ -947,12 +957,18 @@ export default function PaymentView({
               </div>
 
               {/* Hotel Accommodation Line Item */}
-              {hotelFee > 0 && (
-                <div className="flex justify-between text-indigo-700 font-semibold bg-indigo-50/70 p-2 rounded-xl border border-indigo-100">
+              {(reservationData?.selectedHotel || reservationData?.hotelBooked || hotelFee > 0) && (
+                <div className={`flex justify-between font-semibold p-2 rounded-xl border ${
+                  isComplimentaryStay
+                    ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                    : 'text-indigo-700 bg-indigo-50/70 border-indigo-100'
+                }`}>
                   <span className="truncate pr-2">
-                    🏨 Hotel Stay ({reservationData?.selectedHotel?.name || 'Transit Stay'} • {reservationData?.selectedHotel?.roomType || '1 Night'})
+                    🏨 Transit Hotel ({reservationData?.selectedHotel?.name || 'Partner Airport Stay'} • {isComplimentaryStay ? '100% Free Layover Stay' : (reservationData?.selectedHotel?.roomType || '1 Night')})
                   </span>
-                  <span className="font-bold shrink-0">+${hotelFee}.00</span>
+                  <span className="font-bold shrink-0">
+                    {isComplimentaryStay ? 'FREE ($0.00)' : `+$${hotelFee}.00`}
+                  </span>
                 </div>
               )}
               {discountAmount > 0 && (
@@ -1204,10 +1220,10 @@ export default function PaymentView({
                   <span className="font-bold">+${mealFee}.00</span>
                 </div>
               )}
-              {hotelFee > 0 && (
-                <div className="flex justify-between items-center text-xs text-indigo-700">
-                  <span>Transit Hotel Accommodation ({reservationData?.selectedHotel?.name || 'Transit Stay'})</span>
-                  <span className="font-bold">+${hotelFee}.00</span>
+              {(reservationData?.selectedHotel || reservationData?.hotelBooked || hotelFee > 0) && (
+                <div className={`flex justify-between items-center text-xs ${isComplimentaryStay ? 'text-emerald-700 font-bold' : 'text-indigo-700'}`}>
+                  <span>Transit Hotel ({reservationData?.selectedHotel?.name || 'Partner Airport Stay'})</span>
+                  <span className="font-bold">{isComplimentaryStay ? 'FREE ($0.00)' : `+$${hotelFee}.00`}</span>
                 </div>
               )}
               {discountAmount > 0 && (

@@ -74,12 +74,22 @@ function Field({ label, icon: Icon, chevron = false, children }) {
 const fieldInput =
   'min-w-0 flex-1 appearance-none truncate bg-transparent text-base font-bold text-slate-900 outline-none sm:text-sm';
 
+// Helper to format date as YYYY-MM-DD for date inputs based on current daily date
+const getFormattedDate = (daysOffset = 0) => {
+  const d = new Date();
+  d.setDate(d.getDate() + daysOffset);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export default function FlightSearchSection({ onExecuteSearch }) {
   const [tripType, setTripType] = useState('roundtrip'); // 'oneway', 'roundtrip', 'multicity'
   const [origin, setOrigin] = useState('CMB');
   const [destination, setDestination] = useState('SIN');
-  const [departDate, setDepartDate] = useState('2026-09-10');
-  const [returnDate, setReturnDate] = useState('2026-09-17');
+  const [departDate, setDepartDate] = useState(() => getFormattedDate(0));
+  const [returnDate, setReturnDate] = useState(() => getFormattedDate(7));
   const [passengers, setPassengers] = useState(1);
   const [cabinClass, setCabinClass] = useState('ECONOMY');
   const [validationError, setValidationError] = useState('');
@@ -411,11 +421,34 @@ export default function FlightSearchSection({ onExecuteSearch }) {
             {/* Dates */}
             <div className={`grid gap-3 xl:flex-[1.2] ${tripType === 'roundtrip' ? 'grid-cols-2' : 'grid-cols-1'}`}>
               <Field label="Depart" icon={CalendarIcon}>
-                <input type="date" value={departDate} onChange={(e) => setDepartDate(e.target.value)} className={fieldInput} />
+                <input
+                  type="date"
+                  min={getFormattedDate(0)}
+                  value={departDate}
+                  onChange={(e) => {
+                    const newDepart = e.target.value;
+                    setDepartDate(newDepart);
+                    if (returnDate && newDepart && new Date(returnDate) < new Date(newDepart)) {
+                      const d = new Date(newDepart);
+                      d.setDate(d.getDate() + 7);
+                      const yr = d.getFullYear();
+                      const mo = String(d.getMonth() + 1).padStart(2, '0');
+                      const da = String(d.getDate()).padStart(2, '0');
+                      setReturnDate(`${yr}-${mo}-${da}`);
+                    }
+                  }}
+                  className={fieldInput}
+                />
               </Field>
               {tripType === 'roundtrip' && (
                 <Field label="Return" icon={CalendarIcon}>
-                  <input type="date" value={returnDate} onChange={(e) => setReturnDate(e.target.value)} className={fieldInput} />
+                  <input
+                    type="date"
+                    min={departDate || getFormattedDate(0)}
+                    value={returnDate}
+                    onChange={(e) => setReturnDate(e.target.value)}
+                    className={fieldInput}
+                  />
                 </Field>
               )}
             </div>

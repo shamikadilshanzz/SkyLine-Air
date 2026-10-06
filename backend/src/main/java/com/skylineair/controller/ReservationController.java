@@ -146,8 +146,15 @@ public class ReservationController {
 
         java.util.Set<String> occupied = new java.util.HashSet<>();
         for (Reservation r : flightReservations) {
-            // Cancelled bookings release their seats back to inventory
-            if ("CANCELLED".equalsIgnoreCase(r.getBookingStatus())) {
+            // Cancelled or refunded bookings release their seats back to inventory
+            String status = r.getBookingStatus();
+            if (status != null && (
+                    status.equalsIgnoreCase("CANCELLED") ||
+                    status.equalsIgnoreCase("REFUNDED") ||
+                    status.equalsIgnoreCase("REFUND_APPROVED") ||
+                    status.equalsIgnoreCase("CANCELLED_AND_REFUNDED") ||
+                    status.equalsIgnoreCase("CANCEL")
+            )) {
                 continue;
             }
             if (excludePnr != null && excludePnr.equalsIgnoreCase(r.getPnrCode())) {
@@ -201,8 +208,15 @@ public class ReservationController {
         if (reservation.getFlightNumber() != null && !reservation.getFlightNumber().trim().isEmpty() && reservation.getPassengers() != null) {
             List<Reservation> existingFlightRes = reservationRepository.findByFlightNumber(reservation.getFlightNumber().trim());
             for (Reservation existing : existingFlightRes) {
-                // Cancelled tickets release their seats
-                if ("CANCELLED".equalsIgnoreCase(existing.getBookingStatus())) {
+                // Cancelled or refunded tickets release their seats back to inventory
+                String status = existing.getBookingStatus();
+                if (status != null && (
+                        status.equalsIgnoreCase("CANCELLED") ||
+                        status.equalsIgnoreCase("REFUNDED") ||
+                        status.equalsIgnoreCase("REFUND_APPROVED") ||
+                        status.equalsIgnoreCase("CANCELLED_AND_REFUNDED") ||
+                        status.equalsIgnoreCase("CANCEL")
+                )) {
                     continue;
                 }
                 if (existing.getPassengers() != null) {
@@ -220,6 +234,18 @@ public class ReservationController {
                         }
                     }
                 }
+            }
+        }
+
+        // Ensure layover >= 8 hours hotel stays are strictly 100% complimentary ($0.00)
+        boolean isComplimentaryLayover = Boolean.TRUE.equals(reservation.getHasLayover())
+                && reservation.getLayoverDurationHours() != null
+                && reservation.getLayoverDurationHours() >= 8.0;
+
+        if (isComplimentaryLayover) {
+            reservation.setHotelPrice(BigDecimal.ZERO);
+            if (reservation.getHotelVoucherCode() == null || reservation.getHotelVoucherCode().isBlank() || !reservation.getHotelVoucherCode().startsWith("COMP-HTL")) {
+                reservation.setHotelVoucherCode("COMP-HTL-" + (1000 + new Random().nextInt(9000)));
             }
         }
 
@@ -278,12 +304,14 @@ public class ReservationController {
                     }
 
                     hb.setRoomType(saved.getHotelRoomType() != null && !saved.getHotelRoomType().isBlank() ? saved.getHotelRoomType() : "Deluxe Transit Suite");
-                    hb.setAmount(saved.getHotelPrice() != null ? saved.getHotelPrice() : BigDecimal.ZERO);
-                    hb.setIsComplimentary(Boolean.TRUE.equals(saved.getHasLayover()) && saved.getLayoverDurationHours() != null && saved.getLayoverDurationHours() >= 8);
+                    hb.setIsComplimentary(isComplimentaryLayover);
+                    hb.setAmount(isComplimentaryLayover ? BigDecimal.ZERO : (saved.getHotelPrice() != null ? saved.getHotelPrice() : BigDecimal.ZERO));
 
                     String vCode = saved.getHotelVoucherCode();
                     if (vCode == null || vCode.isBlank()) {
-                        vCode = "HTV-" + (100000 + new Random().nextInt(900000));
+                        vCode = isComplimentaryLayover
+                                ? "COMP-HTL-" + (1000 + new Random().nextInt(9000))
+                                : "HTV-" + (100000 + new Random().nextInt(900000));
                         saved.setHotelVoucherCode(vCode);
                         reservationRepository.save(saved);
                     }

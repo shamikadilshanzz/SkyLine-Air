@@ -22,9 +22,15 @@ import {
   Users,
   Gauge,
   Armchair,
-  Sparkles
+  Sparkles,
+  Check,
+  CheckCircle2,
+  Bed,
+  Star,
+  Info,
+  ExternalLink
 } from 'lucide-react';
-import { INITIAL_FLIGHTS, INITIAL_AIRPORTS, INITIAL_AIRCRAFT, PLANE_PHOTO_PRESETS } from '../../data/mockData';
+import { INITIAL_FLIGHTS, INITIAL_AIRPORTS, INITIAL_AIRCRAFT, INITIAL_HOTELS, PLANE_PHOTO_PRESETS } from '../../data/mockData';
 import AirportManagementView from './AirportManagementView';
 import AircraftManagementView from './AircraftManagementView';
 import { fetchAircraftApi } from '../../api/apiService';
@@ -123,6 +129,20 @@ export const calculateFlightDuration = (departureStr, arrivalStr) => {
   const minutes = totalMinutes % 60;
 
   return `${hours}h ${String(minutes).padStart(2, '0')}m`;
+};
+
+/**
+ * Matched Partner Hotel lookup by airport code or city
+ */
+export const findPartnerHotel = (airportCode, city) => {
+  if (!airportCode && !city) return null;
+  const code = (airportCode || '').trim().toUpperCase();
+  const c = (city || '').trim().toLowerCase();
+  return (
+    INITIAL_HOTELS.find(h => (h.airportCode || '').toUpperCase() === code) ||
+    INITIAL_HOTELS.find(h => (h.city || '').toLowerCase() === c) ||
+    null
+  );
 };
 
 /* ====================== small presentational pieces ====================== */
@@ -227,6 +247,371 @@ function CabinPricingFields({ data, onChange }) {
         );
       })}
     </div>
+  );
+}
+
+/**
+ * Layover & Hotel Accommodation Form Section
+ */
+function LayoverHotelFormSection({ data, onChange, airports = [] }) {
+  const isLayover = Boolean(data.hasLayover || Number(data.stops) > 0);
+  const durationHours = Number(data.layoverDurationHours) || 0;
+  const isComplimentary = isLayover && durationHours >= 8.0;
+  const matchedHotel = isLayover ? findPartnerHotel(data.layoverAirport, data.layoverCity) : null;
+
+  const handleStopTypeChange = (type) => {
+    if (type === 'DIRECT') {
+      onChange({
+        stops: 0,
+        hasLayover: false,
+        layoverAirport: '',
+        layoverCity: '',
+        layoverDurationHours: 0
+      });
+    } else if (type === '1STOP') {
+      const defaultHub = airports.find(a => a.code === 'DXB') || airports[0] || { code: 'DXB', city: 'Dubai' };
+      onChange({
+        stops: 1,
+        hasLayover: true,
+        layoverAirport: data.layoverAirport || defaultHub.code,
+        layoverCity: data.layoverCity || defaultHub.city,
+        layoverDurationHours: data.layoverDurationHours > 0 ? data.layoverDurationHours : 8.0
+      });
+    } else if (type === '2STOPS') {
+      const defaultHub = airports.find(a => a.code === 'DXB') || airports[0] || { code: 'DXB', city: 'Dubai' };
+      onChange({
+        stops: 2,
+        hasLayover: true,
+        layoverAirport: data.layoverAirport || defaultHub.code,
+        layoverCity: data.layoverCity || defaultHub.city,
+        layoverDurationHours: data.layoverDurationHours > 0 ? data.layoverDurationHours : 8.0
+      });
+    }
+  };
+
+  const handleLayoverAirportSelect = (code) => {
+    const found = airports.find(a => a.code === code);
+    onChange({
+      layoverAirport: code,
+      layoverCity: found?.city || data.layoverCity || code
+    });
+  };
+
+  return (
+    <FormSection
+      icon={Hotel}
+      title="5. Stops, layover perks & partner hotel accommodation"
+      aside={isLayover ? (isComplimentary ? '⭐ Free 5★ Hotel Stay Eligible' : '⏱️ Standard Transit Layover') : 'Direct non-stop flight'}
+    >
+      <div className="space-y-4">
+        {/* Route stop type pills */}
+        <div>
+          <span className="mb-1.5 block text-xs font-semibold text-slate-700">Flight route itinerary type *</span>
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { id: 'DIRECT', label: 'Non-stop (Direct)', desc: '0 Stops' },
+              { id: '1STOP', label: '1 Stop Layover', desc: 'Single Transit Hub' },
+              { id: '2STOPS', label: '2+ Multi-Stop', desc: 'Connecting Route' }
+            ].map((opt) => {
+              const active =
+                opt.id === 'DIRECT'
+                  ? !isLayover || Number(data.stops) === 0
+                  : opt.id === '1STOP'
+                  ? isLayover && Number(data.stops) === 1
+                  : isLayover && Number(data.stops) >= 2;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => handleStopTypeChange(opt.id)}
+                  className={`flex flex-col items-center justify-center rounded-xl border p-2.5 text-center transition-all ${
+                    active
+                      ? 'border-blue-600 bg-blue-50/90 text-blue-950 font-bold shadow-xs ring-2 ring-blue-500/20'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="text-xs font-bold">{opt.label}</span>
+                  <span className="text-[10px] text-slate-400 font-medium">{opt.desc}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Layover details when layover is enabled */}
+        {isLayover && (
+          <div className="space-y-3 rounded-xl border border-blue-100 bg-white p-3.5 shadow-xs">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Field label="Layover airport hub *">
+                <select
+                  value={data.layoverAirport || ''}
+                  onChange={(e) => handleLayoverAirportSelect(e.target.value)}
+                  className={INPUT}
+                >
+                  <option value="">Select airport hub...</option>
+                  {airports.map((a) => (
+                    <option key={a.code} value={a.code}>
+                      {a.city} ({a.code}) - {a.country}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="Layover city">
+                <input
+                  type="text"
+                  value={data.layoverCity || ''}
+                  onChange={(e) => onChange({ layoverCity: e.target.value })}
+                  placeholder="e.g. Dubai"
+                  className={INPUT}
+                />
+              </Field>
+
+              <Field label="Layover duration (hours) *">
+                <div className="relative">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.5"
+                    min="0.5"
+                    max="72"
+                    value={data.layoverDurationHours ?? ''}
+                    onChange={(e) => onChange({ layoverDurationHours: parseFloat(e.target.value) || 0 })}
+                    placeholder="e.g. 8.5"
+                    className={`${INPUT} pr-12`}
+                  />
+                  <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                    hrs
+                  </span>
+                </div>
+              </Field>
+            </div>
+
+            {/* Quick duration presets */}
+            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+              <span className="text-[11px] font-semibold text-slate-500 mr-1">Quick duration:</span>
+              {[
+                { label: '3.5h (Quick)', val: 3.5 },
+                { label: '6h (Short)', val: 6.0 },
+                { label: '8h (Free Hotel)', val: 8.0, highlight: true },
+                { label: '12h (Overnight)', val: 12.0 },
+                { label: '24h (Full day)', val: 24.0 }
+              ].map((p) => (
+                <button
+                  key={p.val}
+                  type="button"
+                  onClick={() => onChange({ layoverDurationHours: p.val })}
+                  className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition-all ${
+                    Number(data.layoverDurationHours) === p.val
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : p.highlight
+                      ? 'border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                      : 'border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Hotel Qualification Banner & Partner Info */}
+            <div className={`overflow-hidden rounded-xl border p-3.5 transition-all ${
+              isComplimentary
+                ? 'border-emerald-200 bg-gradient-to-br from-emerald-50 via-teal-50/50 to-white shadow-xs'
+                : 'border-amber-200 bg-gradient-to-br from-amber-50/70 via-orange-50/30 to-white'
+            }`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2.5">
+                  <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl shadow-xs ${
+                    isComplimentary ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white'
+                  }`}>
+                    {isComplimentary ? <Sparkles className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
+                  </span>
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`text-xs font-black ${isComplimentary ? 'text-emerald-950' : 'text-amber-950'}`}>
+                        {isComplimentary
+                          ? '✨ 100% Complimentary Luxury Hotel Stay Qualified'
+                          : '⏱️ Standard Transit Layover (< 8 Hours)'}
+                      </span>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
+                        isComplimentary ? 'bg-emerald-200 text-emerald-900' : 'bg-amber-200 text-amber-900'
+                      }`}>
+                        {isComplimentary ? 'Free 5★ Stay' : 'Transit Discount'}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[11px] leading-relaxed text-slate-600">
+                      {isComplimentary
+                        ? 'Skyline Air Transit Policy: All passengers with layovers ≥8.0 hours automatically receive 100% complimentary 5-star hotel accommodation, 24/7 airport transfers, and breakfast vouchers.'
+                        : 'Layovers under 8 hours do not qualify for complimentary hotel accommodation, but passengers can book discounted transit suites and lounge passes.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Matched Partner Hotel Details Card */}
+              {matchedHotel ? (
+                <div className="mt-3 flex flex-col sm:flex-row items-center gap-3 rounded-xl border border-slate-200/80 bg-white/90 p-2.5 backdrop-blur">
+                  <img
+                    src={matchedHotel.image}
+                    alt={matchedHotel.name}
+                    className="h-14 w-20 shrink-0 rounded-lg object-cover shadow-xs"
+                  />
+                  <div className="min-w-0 flex-1 text-xs">
+                    <div className="flex items-center gap-1.5 font-extrabold text-slate-900 truncate">
+                      <Hotel className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                      <span className="truncate">{matchedHotel.name}</span>
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                      <span>{matchedHotel.city}, {matchedHotel.country} ({matchedHotel.airportCode})</span>
+                      <span>•</span>
+                      <span>{matchedHotel.distanceKm} km from terminal</span>
+                      <span>•</span>
+                      <span className="text-amber-600 font-bold">★ {matchedHotel.starRating} Stars</span>
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {matchedHotel.amenities?.slice(0, 3).map((am, i) => (
+                        <span key={i} className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
+                          {am}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  {isComplimentary && (
+                    <div className="shrink-0 rounded-xl bg-emerald-50 px-3 py-1.5 text-center border border-emerald-200">
+                      <span className="block text-[10px] font-bold uppercase tracking-wider text-emerald-600">Cost</span>
+                      <span className="text-xs font-black text-emerald-700">$0.00 FREE</span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="mt-2.5 rounded-lg bg-white/70 px-3 py-2 text-[11px] text-slate-500 italic">
+                  No specific partner hotel registered for airport {data.layoverAirport || 'hub'}. Standard partner voucher will be assigned on arrival.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </FormSection>
+  );
+}
+
+/**
+ * Aircraft Photo & Image Livery Form Section
+ */
+function PlanePhotoFormSection({ data, onChange }) {
+  const [imgError, setImgError] = useState(false);
+  const currentImg = data.image || PLANE_PHOTO_PRESETS[0].url;
+
+  return (
+    <FormSection
+      icon={ImageIcon}
+      title="6. Plane photo and livery visual options"
+      aside="High-res photo displayed across booking searches"
+    >
+      <div className="space-y-4">
+        {/* Live Photo Preview + URL input */}
+        <div className="flex flex-col sm:flex-row items-stretch gap-3">
+          <div className="relative h-28 w-full sm:w-44 shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 shadow-sm group">
+            <img
+              src={imgError ? PLANE_PHOTO_PRESETS[0].url : currentImg}
+              alt="Aircraft preview"
+              onError={() => setImgError(true)}
+              onLoad={() => setImgError(false)}
+              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent" />
+            <div className="absolute bottom-2 left-2.5 right-2.5 flex items-center justify-between text-[11px] font-bold text-white">
+              <span className="truncate">{data.flightNumber || 'Preview'}</span>
+              <span className="rounded bg-black/40 px-1.5 py-0.5 text-[9px] backdrop-blur font-mono">
+                {data.tailNumber || 'LIVE'}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-1 flex-col justify-between gap-2 min-w-0">
+            <label className="block">
+              <span className="mb-1.5 flex items-center justify-between text-xs font-bold text-slate-700">
+                <span>Custom Aircraft Image URL</span>
+                {data.image && (
+                  <button
+                    type="button"
+                    onClick={() => onChange({ image: '' })}
+                    className="text-[11px] font-medium text-slate-400 hover:text-red-600 transition"
+                  >
+                    Clear URL
+                  </button>
+                )}
+              </span>
+              <input
+                type="url"
+                value={data.image || ''}
+                onChange={(e) => {
+                  setImgError(false);
+                  onChange({ image: e.target.value });
+                }}
+                placeholder="https://images.unsplash.com/photo-..."
+                className={INPUT}
+              />
+            </label>
+            <p className="text-[11px] text-slate-500">
+              Provide a direct image URL or click one of the aircraft photo presets below to apply instantly.
+            </p>
+          </div>
+        </div>
+
+        {/* Visual Preset Cards Grid */}
+        <div>
+          <span className="mb-2 block text-xs font-bold text-slate-700">
+            Or pick from aircraft fleet photo presets
+          </span>
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4">
+            {PLANE_PHOTO_PRESETS.map((preset, idx) => {
+              const isSelected = data.image === preset.url;
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => {
+                    setImgError(false);
+                    onChange({ image: preset.url });
+                  }}
+                  className={`group relative flex flex-col overflow-hidden rounded-xl border text-left transition-all ${
+                    isSelected
+                      ? 'border-blue-600 ring-2 ring-blue-500/25 shadow-md bg-blue-50/40'
+                      : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-xs'
+                  }`}
+                >
+                  <div className="relative h-20 w-full overflow-hidden bg-slate-800">
+                    <img
+                      src={preset.url}
+                      alt={preset.label}
+                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-transparent" />
+                    {isSelected && (
+                      <span className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm">
+                        <Check className="h-3 w-3 stroke-[3]" />
+                      </span>
+                    )}
+                    {preset.tag && (
+                      <span className="absolute bottom-1.5 left-2 rounded bg-black/50 px-1.5 py-0.5 text-[9px] font-bold text-slate-200 backdrop-blur">
+                        {preset.tag}
+                      </span>
+                    )}
+                  </div>
+                  <div className="p-2">
+                    <div className="text-[11px] font-bold text-slate-900 truncate">{preset.label}</div>
+                    <div className="text-[10px] text-slate-500 truncate">{preset.model || 'Commercial Jet'}</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </FormSection>
   );
 }
 
@@ -631,6 +1016,11 @@ export default function ScheduleManagementView({ flights: propsFlights, onSchedu
     if (!editingFlight) return;
     setConflictWarning('');
 
+    if (editingFlight.origin === editingFlight.destination) {
+      alert('Origin and Destination airports cannot be the same.');
+      return;
+    }
+
     if (new Date(editingFlight.arrivalTime) <= new Date(editingFlight.departureTime)) {
       alert('Arrival time must be strictly after Departure time.');
       return;
@@ -641,21 +1031,25 @@ export default function ScheduleManagementView({ flights: propsFlights, onSchedu
       return;
     }
 
+    const origAirport = airports.find(a => a.code === editingFlight.origin);
+    const destAirport = airports.find(a => a.code === editingFlight.destination);
+    const layoverAirportObj = airports.find(a => a.code === editingFlight.layoverAirport);
+
     const calculatedDuration = calculateFlightDuration(editingFlight.departureTime, editingFlight.arrivalTime);
 
     const payload = {
-      flightNumber: editingFlight.flightNumber,
+      flightNumber: (editingFlight.flightNumber || '').toUpperCase(),
       originCode: editingFlight.origin,
       destinationCode: editingFlight.destination,
-      originCity: editingFlight.originCity,
-      destinationCity: editingFlight.destinationCity,
+      originCity: origAirport?.city || editingFlight.originCity || editingFlight.origin,
+      destinationCity: destAirport?.city || editingFlight.destinationCity || editingFlight.destination,
       departureTime: editingFlight.departureTime,
       arrivalTime: editingFlight.arrivalTime,
       duration: editingFlight.duration || calculatedDuration || '6h 00m',
       stops: Number(editingFlight.stops) || 0,
-      hasLayover: Boolean(editingFlight.hasLayover || editingFlight.stops > 0),
+      hasLayover: Boolean(editingFlight.hasLayover || Number(editingFlight.stops) > 0),
       layoverAirport: editingFlight.layoverAirport || '',
-      layoverCity: editingFlight.layoverCity || '',
+      layoverCity: layoverAirportObj?.city || editingFlight.layoverCity || '',
       layoverDurationHours: Number(editingFlight.layoverDurationHours) || 0.0,
       aircraftId: Number(editingFlight.aircraftId) || 1,
       aircraftModel: editingFlight.aircraft,
@@ -666,7 +1060,7 @@ export default function ScheduleManagementView({ flights: propsFlights, onSchedu
       totalSeats: Number(editingFlight.totalSeats),
       availableSeats: Number(editingFlight.availableSeats),
       status: editingFlight.status,
-      image: editingFlight.image
+      image: editingFlight.image || PLANE_PHOTO_PRESETS[0].url
     };
 
     if (editingFlight.rawId) {
@@ -1091,10 +1485,22 @@ export default function ScheduleManagementView({ flights: propsFlights, onSchedu
                             {flight.destination}
                           </div>
                           <div className="mt-0.5 text-[11px] text-slate-500">{flight.originCity} to {flight.destinationCity}</div>
-                          {flight.hasLayover && (
-                            <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
-                              <Hotel className="h-3 w-3" /> {flight.layoverCity} ({flight.layoverDurationHours}h)
-                            </span>
+                          {flight.hasLayover ? (
+                            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                              <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold ${
+                                (Number(flight.layoverDurationHours) || 0) >= 8
+                                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
+                                  : 'bg-amber-50 text-amber-900 border border-amber-300'
+                              }`}>
+                                <Hotel className="h-3 w-3" />
+                                {flight.layoverCity || flight.layoverAirport} ({flight.layoverDurationHours || 0}h)
+                                {(Number(flight.layoverDurationHours) || 0) >= 8 && (
+                                  <span className="font-extrabold text-emerald-700">• Free 5★ Hotel</span>
+                                )}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="mt-0.5 inline-block text-[10px] font-semibold text-slate-400">Non-stop</span>
                           )}
                         </td>
 
@@ -1193,16 +1599,34 @@ export default function ScheduleManagementView({ flights: propsFlights, onSchedu
                   </div>
 
                   <div className="flex flex-1 flex-col p-4">
-                    {/* Duration / stops / layover */}
-                    <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-slate-500">
+                    {/* Duration / stops */}
+                    <div className="mb-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-slate-500">
                       <span className="flex items-center gap-1"><Clock className="h-3 w-3 text-blue-500" /> {flight.duration}</span>
                       <span className="flex items-center gap-1"><Gauge className="h-3 w-3 text-blue-500" /> {stopsLabel(flight)}</span>
-                      {flight.hasLayover && (
-                        <span className="flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">
-                          <Hotel className="h-3 w-3" /> {flight.layoverCity} ({flight.layoverDurationHours}h)
-                        </span>
-                      )}
                     </div>
+
+                    {/* Layover and Hotel accommodation pill */}
+                    {flight.hasLayover && (
+                      <div className={`mb-3 flex items-center justify-between gap-2 rounded-xl p-2.5 text-xs ${
+                        (Number(flight.layoverDurationHours) || 0) >= 8
+                          ? 'border border-emerald-200/80 bg-emerald-50/80 text-emerald-950'
+                          : 'border border-amber-200/80 bg-amber-50/80 text-amber-950'
+                      }`}>
+                        <div className="flex items-center gap-1.5 min-w-0 font-bold truncate">
+                          <Hotel className={`h-4 w-4 shrink-0 ${(Number(flight.layoverDurationHours) || 0) >= 8 ? 'text-emerald-600' : 'text-amber-600'}`} />
+                          <span className="truncate">{flight.layoverCity || flight.layoverAirport} ({flight.layoverDurationHours}h Layover)</span>
+                        </div>
+                        {(Number(flight.layoverDurationHours) || 0) >= 8 ? (
+                          <span className="shrink-0 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-extrabold text-white shadow-xs">
+                            Free 5★ Hotel
+                          </span>
+                        ) : (
+                          <span className="shrink-0 rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-bold text-amber-900">
+                            Transit Pass
+                          </span>
+                        )}
+                      </div>
+                    )}
 
                     {/* Schedule timestamps */}
                     <div className="mb-3 grid grid-cols-2 gap-2.5 text-xs">
@@ -1274,7 +1698,7 @@ export default function ScheduleManagementView({ flights: propsFlights, onSchedu
       {/* ================= Add flight ================= */}
       {showAddModal && (
         <Sheet
-          eyebrow= "scheduler"
+          eyebrow="Flight Scheduler"
           title="Add and schedule a new flight route"
           icon={Plus}
           onClose={() => setShowAddModal(false)}
@@ -1324,7 +1748,7 @@ export default function ScheduleManagementView({ flights: propsFlights, onSchedu
                 </div>
               </FormSection>
 
-              <FormSection icon={MapPin} title="2. Route and cities">
+              <FormSection icon={MapPin} title="2. Route and hub cities">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Field label="Origin airport and city *">
                     <select
@@ -1418,71 +1842,11 @@ export default function ScheduleManagementView({ flights: propsFlights, onSchedu
                 <CabinPricingFields data={newFlight} onChange={patchNew} />
               </FormSection>
 
-              <FormSection icon={Hotel} title="5. Stops, layover perks and status">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <Field label="Flight status">
-                    <select value={newFlight.status} onChange={(e) => patchNew({ status: e.target.value })} className={INPUT}>
-                      {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
-                  </Field>
-                  <Field label="Stops count">
-                    <select
-                      value={newFlight.stops}
-                      onChange={(e) => {
-                        const count = Number(e.target.value);
-                        patchNew({ stops: count, hasLayover: count > 0 });
-                      }}
-                      className={INPUT}
-                    >
-                      <option value={0}>0 (non-stop)</option>
-                      <option value={1}>1 stop (layover)</option>
-                      <option value={2}>2+ stops</option>
-                    </select>
-                  </Field>
-                  <Field label="Layover airport">
-                    <input type="text" value={newFlight.layoverAirport} onChange={(e) => patchNew({ layoverAirport: e.target.value.toUpperCase() })} placeholder="e.g. DXB" className={`${INPUT} uppercase`} />
-                  </Field>
-                  <Field label="Layover duration (hours)">
-                    <input type="number" inputMode="decimal" step="0.5" value={newFlight.layoverDurationHours} onChange={(e) => patchNew({ layoverDurationHours: Number(e.target.value) })} placeholder="e.g. 8.5" className={INPUT} />
-                  </Field>
-                </div>
-              </FormSection>
+              {/* 5. Stops, layover perks & partner hotel */}
+              <LayoverHotelFormSection data={newFlight} onChange={patchNew} airports={airports} />
 
-              <FormSection icon={ImageIcon} title="6. Plane photo">
-                <div className="flex items-center gap-3">
-                  {newFlight.image ? (
-                    <img src={newFlight.image} alt="Preview" className="h-12 w-16 shrink-0 rounded-xl border border-slate-300 object-cover shadow-sm" />
-                  ) : (
-                    <div className="flex h-12 w-16 shrink-0 items-center justify-center rounded-xl bg-slate-200 text-[11px] font-bold text-slate-500">No photo</div>
-                  )}
-                  <input
-                    type="text"
-                    value={newFlight.image}
-                    onChange={(e) => patchNew({ image: e.target.value })}
-                    placeholder="Enter plane image URL"
-                    aria-label="Plane image URL"
-                    className={`${INPUT} min-w-0 flex-1`}
-                  />
-                </div>
-                <div>
-                  <span className="mb-1.5 block text-xs font-semibold text-slate-400">Or pick a preset</span>
-                  <div className="flex flex-wrap gap-2">
-                    {PLANE_PHOTO_PRESETS.map((preset, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => patchNew({ image: preset.url })}
-                        className={`rounded-full border px-3 py-2 text-xs font-semibold transition-all ${newFlight.image === preset.url
-                            ? 'border-blue-600 bg-blue-600 text-white shadow-md shadow-blue-600/20'
-                            : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
-                          }`}
-                      >
-                        {preset.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </FormSection>
+              {/* 6. Plane photo and livery visual options */}
+              <PlanePhotoFormSection data={newFlight} onChange={patchNew} />
             </div>
 
             <SheetFooter onCancel={() => setShowAddModal(false)} submitLabel="Save and publish" />
@@ -1500,12 +1864,19 @@ export default function ScheduleManagementView({ flights: propsFlights, onSchedu
         >
           <form onSubmit={handleEditFlightSubmit} className="flex min-h-0 flex-1 flex-col">
             <div className="flex-1 space-y-4 overflow-y-auto p-5 sm:p-6">
-              <FormSection icon={Plane} title="Flight identifier and status" aside="Changing aircraft auto-syncs seat capacity">
+              {conflictWarning && (
+                <div ref={conflictRef} role="alert" className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-xs font-semibold leading-relaxed text-red-900">
+                  <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
+                  <p>{conflictWarning}</p>
+                </div>
+              )}
+
+              <FormSection icon={Plane} title="1. Flight identifier and fleet details" aside="Changing aircraft auto-syncs seat capacity">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  <Field label="Flight number">
+                  <Field label="Flight number *">
                     <input type="text" value={editingFlight.flightNumber} onChange={(e) => patchEdit({ flightNumber: e.target.value })} className={INPUT} required />
                   </Field>
-                  <Field label="Flight status">
+                  <Field label="Flight status *">
                     <select value={editingFlight.status} onChange={(e) => patchEdit({ status: e.target.value })} className={INPUT}>
                       {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
@@ -1540,22 +1911,57 @@ export default function ScheduleManagementView({ flights: propsFlights, onSchedu
                 </div>
               </FormSection>
 
-              <FormSection icon={Clock} title="Timings and duration">
+              <FormSection icon={MapPin} title="2. Route and hub cities">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Field label="Origin airport and city *">
+                    <select
+                      value={editingFlight.origin}
+                      onChange={(e) => {
+                        const found = airports.find(a => a.code === e.target.value);
+                        patchEdit({ origin: e.target.value, originCity: found?.city || e.target.value });
+                      }}
+                      className={INPUT}
+                    >
+                      {airports.map(a => (
+                        <option key={a.code} value={a.code}>{a.city} ({a.code}) - {a.country}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Destination airport and city *">
+                    <select
+                      value={editingFlight.destination}
+                      onChange={(e) => {
+                        const found = airports.find(a => a.code === e.target.value);
+                        patchEdit({ destination: e.target.value, destinationCity: found?.city || e.target.value });
+                      }}
+                      className={INPUT}
+                    >
+                      {airports.map(a => (
+                        <option key={a.code} value={a.code}>{a.city} ({a.code}) - {a.country}</option>
+                      ))}
+                    </select>
+                  </Field>
+                </div>
+              </FormSection>
+
+              <FormSection icon={Clock} title="3. Schedule timings and duration">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  <Field label="Departure time">
+                  <Field label="Departure time *">
                     <input
                       type="datetime-local"
                       value={editingFlight.departureTime}
                       onChange={(e) => patchEdit({ departureTime: e.target.value })}
                       className={INPUT}
+                      required
                     />
                   </Field>
-                  <Field label="Arrival time">
+                  <Field label="Arrival time *">
                     <input
                       type="datetime-local"
                       value={editingFlight.arrivalTime}
                       onChange={(e) => patchEdit({ arrivalTime: e.target.value })}
                       className={INPUT}
+                      required
                     />
                   </Field>
                   <Field label="Duration">
@@ -1577,7 +1983,7 @@ export default function ScheduleManagementView({ flights: propsFlights, onSchedu
                 </div>
               </FormSection>
 
-              <FormSection icon={DollarSign} title="Seats and cabin class pricing" aside={`Auto-synced: ${editingFlight.totalSeats} seats from DB`}>
+              <FormSection icon={DollarSign} title="4. Seats and cabin class pricing" aside={`Auto-synced: ${editingFlight.totalSeats} seats from DB`}>
                 <div className="mb-2 flex items-center justify-between rounded-xl bg-blue-50/80 px-3.5 py-2 text-xs font-bold text-blue-900 border border-blue-200/80">
                   <span className="flex items-center gap-1.5">
                     <Armchair className="h-4 w-4 text-blue-600" />
@@ -1598,6 +2004,12 @@ export default function ScheduleManagementView({ flights: propsFlights, onSchedu
                 </div>
                 <CabinPricingFields data={editingFlight} onChange={patchEdit} />
               </FormSection>
+
+              {/* 5. Stops, layover perks & partner hotel */}
+              <LayoverHotelFormSection data={editingFlight} onChange={patchEdit} airports={airports} />
+
+              {/* 6. Plane photo and livery visual options */}
+              <PlanePhotoFormSection data={editingFlight} onChange={patchEdit} />
             </div>
 
             <SheetFooter onCancel={() => setEditingFlight(null)} submitLabel="Update flight" />

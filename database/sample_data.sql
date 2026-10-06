@@ -40,18 +40,18 @@ INSERT IGNORE INTO users (user_id, email, password_hash, phone_number, role, fre
 -- ----------------------------------------------------------------------------
 -- 4. Saved Payment Cards (5 records)
 -- ----------------------------------------------------------------------------
-INSERT IGNORE INTO user_cards (card_id, user_id, card_type, card_holder, card_number_masked, last4, expiry, cvv, is_default) VALUES
-(1, 1, 'Visa', 'Alex Morgan', '•••• •••• •••• 4242', '4242', '12/28', '382', TRUE),
-(2, 1, 'Mastercard', 'Alex Morgan', '•••• •••• •••• 8819', '8819', '09/27', '912', FALSE),
-(3, 5, 'Visa', 'Sarah Jenkins', '•••• •••• •••• 1144', '1144', '04/29', '455', TRUE),
-(4, 6, 'Mastercard', 'Chaminda Perera', '•••• •••• •••• 5590', '5590', '11/26', '129', TRUE),
-(5, 5, 'Amex', 'Sarah Jenkins', '•••• •••••• •3005', '3005', '08/28', '8910', FALSE);
+INSERT IGNORE INTO user_cards (card_id, user_id, card_type, card_holder, card_number_masked, last4, expiry, cvv, is_default, created_at) VALUES
+(1, 1, 'Visa', 'Alex Morgan', '•••• •••• •••• 4242', '4242', '12/28', '382', TRUE, '2026-09-01 10:00:00'),
+(2, 1, 'Mastercard', 'Alex Morgan', '•••• •••• •••• 8819', '8819', '09/27', '912', FALSE, '2026-09-05 14:30:00'),
+(3, 5, 'Visa', 'Sarah Jenkins', '•••• •••• •••• 1144', '1144', '04/29', '455', TRUE, '2026-09-10 09:15:00'),
+(4, 6, 'Mastercard', 'Chaminda Perera', '•••• •••• •••• 5590', '5590', '11/26', '129', TRUE, '2026-09-12 16:45:00'),
+(5, 5, 'Amex', 'Sarah Jenkins', '•••• •••••• •3005', '3005', '08/28', '8910', FALSE, '2026-09-15 11:20:00');
 
 -- ----------------------------------------------------------------------------
 -- 5. Flight Schedules (5 records)
 -- ----------------------------------------------------------------------------
 INSERT IGNORE INTO flights (flight_id, flight_number, origin_code, destination_code, origin_city, destination_city, departure_time, arrival_time, duration, stops, has_layover, aircraft_id, aircraft_model, tail_number, base_price_economy, base_price_business, base_price_first, total_seats, available_seats, status, image) VALUES
-(1, 'SL-101', 'CMB', 'SIN', 'Colombo', 'Singapore', '2026-09-25 08:30:00', '2026-09-25 15:00:00', '4h 00m', 0, FALSE, 1, 'Boeing 787-9 Dreamliner', '4R-SLA', 350.00, 850.00, 1500.00, 48, 42, 'ON_TIME', 'https://cdn.phototourl.com/free/2026-08-30-e4fac5db-76e3-445a-b51c-5af0d4fe8c97.png'),
+(1, 'SL-101', 'CMB', 'SIN', 'Colombo', 'Singapore', '2026-09-25 08:30:00', '2026-09-25 15:00:00', '4h 00m', 0, FALSE, 1, 'Boeing 787-9 Dreamliner', '4R-SLA', 350.00, 850.00, 1500.00, 48, 42, 'ON_TIME', 'https://images7.alphacoders.com/742/thumb-1920-742688.jpg'),
 (2, 'SL-204', 'CMB', 'LHR', 'Colombo', 'London', '2026-09-27 10:15:00', '2026-09-27 22:45:00', '15h 00m', 1, TRUE, 2, 'Airbus A350-900', '4R-SLB', 780.00, 1890.00, 3400.00, 60, 18, 'ON_TIME', 'https://cdn.phototourl.com/free/2026-08-30-9105feb9-f5b9-439f-a9bc-659511f337a3.png'),
 (3, 'SL-308', 'CMB', 'DXB', 'Colombo', 'Dubai', '2026-09-23 14:20:00', '2026-09-23 17:35:00', '4h 45m', 0, FALSE, 3, 'Boeing 777-300ER', '4R-SLC', 480.00, 1100.00, 2100.00, 36, 29, 'ON_TIME', 'https://cdn.phototourl.com/free/2026-08-30-ded93e81-f57b-47a7-8b0c-d3a26a6b27d5.png'),
 (4, 'SL-415', 'DXB', 'JFK', 'Dubai', 'New York', '2026-09-24 02:30:00', '2026-09-24 08:45:00', '14h 15m', 0, FALSE, 3, 'Boeing 777-300ER', '4R-SLC', 920.00, 2400.00, 4200.00, 60, 22, 'ON_TIME', 'https://images.unsplash.com/photo-1519074069444-1ba4eff56022?auto=format&fit=crop&w=800&q=80'),
@@ -103,12 +103,12 @@ INSERT IGNORE INTO payments (payment_id, reservation_id, transaction_reference, 
 -- ----------------------------------------------------------------------------
 -- 10. Ticket Cancellations & Refunds (5 records)
 -- ----------------------------------------------------------------------------
-INSERT IGNORE INTO refund_requests (refund_id, refund_reference, pnr, reservation_id, user_name, user_email, flight_number, original_fare, cancellation_fee, refund_amount, reason, status) VALUES
-(1, 'RF-88391', 'SK-991204', 4, 'Chaminda Perera', 'chaminda.perera@skyline.com', 'SL-415', 4200.00, 300.00, 3900.00, 'Personal schedule change', 'APPROVED'),
-(2, 'RF-88392', 'SK-991201', 1, 'Alex Morgan', 'alex@skyline.com', 'SL-101', 350.00, 50.00, 300.00, 'Medical emergency', 'REJECTED'),
-(3, 'RF-88393', 'SK-991202', 2, 'Alex Morgan', 'alex@skyline.com', 'SL-204', 1890.00, 150.00, 1740.00, 'Visa issuance delay', 'PENDING'),
-(4, 'RF-88394', 'SK-991203', 3, 'Sarah Jenkins', 'sarah.jenkins@skyline.com', 'SL-308', 480.00, 50.00, 430.00, 'Flight time rescheduled by passenger', 'APPROVED'),
-(5, 'RF-88395', 'SK-991205', 5, 'Sarah Jenkins', 'sarah.jenkins@skyline.com', 'SL-520', 1600.00, 100.00, 1500.00, 'Duplicate booking made by error', 'PENDING');
+INSERT IGNORE INTO refund_requests (refund_id, refund_reference, pnr, reservation_id, user_name, user_email, flight_number, original_fare, cancellation_fee, refund_amount, reason, status, requested_date, processed_at) VALUES
+(1, 'RF-88391', 'SK-991204', 4, 'Chaminda Perera', 'chaminda.perera@skyline.com', 'SL-415', 4200.00, 300.00, 3900.00, 'Personal schedule change', 'APPROVED', '2026-09-24 08:15:00', '2026-09-24 10:30:00'),
+(2, 'RF-88392', 'SK-991201', 1, 'Alex Morgan', 'alex@skyline.com', 'SL-101', 350.00, 50.00, 300.00, 'Medical emergency', 'REJECTED', '2026-09-25 09:40:00', '2026-09-25 11:15:00'),
+(3, 'RF-88393', 'SK-991202', 2, 'Alex Morgan', 'alex@skyline.com', 'SL-204', 1890.00, 150.00, 1740.00, 'Visa issuance delay', 'PENDING', '2026-09-27 12:00:00', NULL),
+(4, 'RF-88394', 'SK-991203', 3, 'Sarah Jenkins', 'sarah.jenkins@skyline.com', 'SL-308', 480.00, 50.00, 430.00, 'Flight time rescheduled by passenger', 'APPROVED', '2026-09-23 16:30:00', '2026-09-23 17:45:00'),
+(5, 'RF-88395', 'SK-991205', 5, 'Sarah Jenkins', 'sarah.jenkins@skyline.com', 'SL-520', 1600.00, 100.00, 1500.00, 'Duplicate booking made by error', 'PENDING', '2026-09-26 14:10:00', NULL);
 
 -- ----------------------------------------------------------------------------
 -- 11. Hotel Bookings (5 records)

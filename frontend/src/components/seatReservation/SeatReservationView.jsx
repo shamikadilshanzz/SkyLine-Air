@@ -194,6 +194,7 @@ export default function SeatReservationView({
       const flightRawId = selectedFlight?.rawId || selectedFlight?.flightId || (selectedFlight?.id && !String(selectedFlight.id).startsWith('FL-') ? selectedFlight.id : null);
       
       const foundOccupied = new Set();
+      let apiSuccess = false;
 
       // 1. Try dedicated live occupied-seats endpoint
       try {
@@ -201,6 +202,7 @@ export default function SeatReservationView({
         const apiData = await fetchOccupiedSeatsApi(flightNum, flightRawId);
         if (Array.isArray(apiData)) {
           apiData.forEach(s => s && foundOccupied.add(String(s).trim().toUpperCase()));
+          apiSuccess = true;
         }
       } catch (err) {
         console.warn('[SeatReservationView] Direct occupied seats API notice:', err.message);
@@ -214,7 +216,9 @@ export default function SeatReservationView({
           allRes.forEach(r => {
             const isMatch = (flightNum && r.flightNumber && r.flightNumber.toUpperCase() === flightNum.toUpperCase()) ||
                             (flightRawId && r.flightId === flightRawId);
-            if (isMatch && r.bookingStatus !== 'CANCELLED') {
+            const statusUpper = String(r.bookingStatus || '').toUpperCase();
+            const isCancelled = statusUpper === 'CANCELLED' || statusUpper === 'REFUNDED' || statusUpper === 'REFUND_APPROVED' || statusUpper === 'CANCELLED_AND_REFUNDED' || statusUpper === 'CANCEL';
+            if (isMatch && !isCancelled) {
               if (r.passengers && Array.isArray(r.passengers)) {
                 r.passengers.forEach(p => {
                   if (p.seatNumber) foundOccupied.add(String(p.seatNumber).trim().toUpperCase());
@@ -223,13 +227,14 @@ export default function SeatReservationView({
               }
             }
           });
+          apiSuccess = true;
         }
       } catch (err) {
         console.warn('[SeatReservationView] Reservations fallback notice:', err.message);
       }
 
-      // 3. Check local storage cache
-      if (flightNum) {
+      // 3. Fallback ONLY if backend API is completely unreachable
+      if (!apiSuccess && flightNum) {
         try {
           const cached = JSON.parse(localStorage.getItem(`skyline_occupied_${flightNum}`) || '[]');
           if (Array.isArray(cached)) {
@@ -242,8 +247,8 @@ export default function SeatReservationView({
         const list = Array.from(foundOccupied);
         setOccupiedSeats(list);
 
-        // Update local storage cache to keep it in sync
-        if (flightNum && list.length > 0) {
+        // Synchronize local storage cache to match authoritative backend state
+        if (flightNum) {
           try {
             localStorage.setItem(`skyline_occupied_${flightNum}`, JSON.stringify(list));
           } catch (e) {}
@@ -412,8 +417,16 @@ export default function SeatReservationView({
   }, []);
 
   const selectedRoomTypeObj = ROOM_TYPES.find(r => r.id === selectedRoomTypeId) || ROOM_TYPES[1];
-  const hotelUnitPrice = selectedHotel ? (Number(selectedHotel.pricePerNight) + selectedRoomTypeObj.priceAdd) : 0;
-  const totalHotelFee = selectedHotel ? (hotelUnitPrice * hotelNights) : 0;
+
+  const flightHasLayover = Boolean(selectedFlight?.hasLayover);
+  const layoverHours = Number(selectedFlight?.layoverDurationHours || 0);
+  const hotelThreshold = Number(selectedHotel?.complimentaryThresholdHours) || 8;
+  const isHotelComplimentary = flightHasLayover && layoverHours >= hotelThreshold;
+  const isHotelDiscounted = flightHasLayover && !isHotelComplimentary && layoverHours >= 6;
+
+  const baseUnitPrice = selectedHotel ? (Number(selectedHotel.pricePerNight) + selectedRoomTypeObj.priceAdd) : 0;
+  const hotelUnitPrice = isHotelComplimentary ? 0 : (isHotelDiscounted ? Math.round(baseUnitPrice * 0.8) : baseUnitPrice);
+  const totalHotelFee = selectedHotel ? (isHotelComplimentary ? 0 : hotelUnitPrice * hotelNights) : 0;
   const totalBaggageFee = passengersList.reduce((acc, p) => acc + (p.extraBaggageKg * 10), 0);
   const totalMealFee = passengersList.reduce((acc, p) => acc + (p.mealDetails?.price || 0), 0);
   const grandTotal = baseFlightPrice + totalBaggageFee + totalMealFee + totalHotelFee;
@@ -494,7 +507,9 @@ export default function SeatReservationView({
       extraBaggageFee: totalBaggageFee,
       mealFee: totalMealFee,
       hotelBooked: !!selectedHotel,
-      hotelPrice: totalHotelFee,
+      hotelPrice: isHotelComplimentary ? 0 : totalHotelFee,
+      isComplimentaryHotel: isHotelComplimentary,
+      hotelVoucherCode: selectedHotel ? (isHotelComplimentary ? `COMP-HTL-${Math.floor(1000 + Math.random() * 9000)}` : `HTV-${Math.floor(100000 + Math.random() * 900000)}`) : null,
       selectedHotel: selectedHotel ? {
         id: selectedHotel.id,
         rawId: selectedHotel.rawId,
@@ -504,12 +519,13 @@ export default function SeatReservationView({
         airportCode: selectedHotel.airportCode,
         roomType: selectedRoomTypeObj.name,
         roomTypeId: selectedRoomTypeId,
-        pricePerNight: hotelUnitPrice,
+        pricePerNight: isHotelComplimentary ? 0 : hotelUnitPrice,
         numberOfNights: hotelNights,
-        totalPrice: totalHotelFee,
+        totalPrice: isHotelComplimentary ? 0 : totalHotelFee,
+        isComplimentary: isHotelComplimentary,
         image: selectedHotel.image,
         starRating: selectedHotel.starRating,
-        voucherCode: `HTV-${Math.floor(100000 + Math.random() * 900000)}`
+        voucherCode: isHotelComplimentary ? `COMP-HTL-${Math.floor(1000 + Math.random() * 9000)}` : `HTV-${Math.floor(100000 + Math.random() * 900000)}`
       } : null,
       totalAmount: grandTotal
     };
@@ -996,6 +1012,10 @@ export default function SeatReservationView({
                       <h4 className="text-xs font-black text-slate-900 tracking-tight">
                         Hotel Accommodation in {activeCountry}
                       </h4>
+                      {/* {flightHasLayover && layoverHours >= 8 ? ( */}
+                        {/* <span className="text-[10px] bg-emerald-500 text-white font-black px-2.5 py-0.5 rounded-full shadow-xs flex items-center gap-1">
+                          <Sparkles className="w-3 h-3 text-amber-300" /> 100% Complimentary Transit Stay (Layover {layoverHours}h ≥ 8h)
+                        </span>} */}
                       {isLongFlight ? (
                         <span className="text-[10px] bg-amber-400 text-slate-950 font-black px-2 py-0.5 rounded-full shadow-xs flex items-center gap-1">
                           <Sparkles className="w-3 h-3" /> Long-Haul Flight ({selectedFlight?.duration || '6h+'})
@@ -1007,14 +1027,21 @@ export default function SeatReservationView({
                       )}
                     </div>
                     <p className="text-[11px] text-slate-500">
-                      Select an optional hotel for your stay in {activeCountry}. (Optional — not required to complete booking)
+                      {flightHasLayover && layoverHours >= 8
+                        ? `Qualifies for 100% FREE complimentary hotel accommodation under airline transit policy.`
+                        : `Select an optional hotel for your stay in ${activeCountry}. (Optional — not required to complete booking)`}
                     </p>
                   </div>
                 </div>
 
                 {selectedHotel && (
-                  <span className="text-xs font-black text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-xl flex items-center gap-1 border border-emerald-300">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> +${totalHotelFee} Added to Ticket
+                  <span className={`text-xs font-black px-2.5 py-1 rounded-xl flex items-center gap-1 border ${
+                    isHotelComplimentary
+                      ? 'text-emerald-700 bg-emerald-100 border-emerald-300'
+                      : 'text-indigo-700 bg-indigo-100 border-indigo-300'
+                  }`}>
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    {isHotelComplimentary ? '100% Free Complimentary Hotel ($0.00)' : `+$${totalHotelFee} Added to Ticket`}
                   </span>
                 )}
               </div>
@@ -1087,11 +1114,18 @@ export default function SeatReservationView({
                       {selectedHotel !== null && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                     </div>
                     <div>
-                      <div className="text-xs font-black text-slate-900">Add Hotel Stay</div>
-                      <div className="text-[10px] text-indigo-600 font-bold">{displayHotels.length} Hotels in {activeCountry}</div>
+                      <div className="text-xs font-black text-slate-900">
+                        {flightHasLayover && layoverHours >= 8 ? 'Claim Free Hotel Stay' : 'Add Hotel Stay'}
+                      </div>
+                      <div className="text-[10px] text-indigo-600 font-bold">
+                        {displayHotels.length} Hotels in {activeCountry}
+                        {flightHasLayover && layoverHours >= 8 && ' (100% Free)'}
+                      </div>
                     </div>
                   </div>
-                  <span className="text-xs font-mono font-bold text-indigo-600">From ${displayHotels[0]?.pricePerNight || 120}</span>
+                  <span className={`text-xs font-mono font-bold ${flightHasLayover && layoverHours >= 8 ? 'text-emerald-600 font-black' : 'text-indigo-600'}`}>
+                    {flightHasLayover && layoverHours >= 8 ? 'FREE ($0.00)' : `From $${displayHotels[0]?.pricePerNight || 120}`}
+                  </span>
                 </button>
               </div>
 
@@ -1138,10 +1172,20 @@ export default function SeatReservationView({
                               </div>
 
                               <div className="text-right shrink-0">
-                                <span className="text-sm font-black text-indigo-700 font-mono block">
-                                  ${hotel.pricePerNight}
-                                </span>
-                                <span className="text-[9px] text-slate-400 block">per night</span>
+                                {flightHasLayover && layoverHours >= (Number(hotel.complimentaryThresholdHours) || 8) ? (
+                                  <>
+                                    <span className="text-[10px] line-through text-slate-400 font-mono block">${hotel.pricePerNight}</span>
+                                    <span className="text-sm font-black text-emerald-600 font-mono block">FREE</span>
+                                    <span className="text-[9px] bg-emerald-100 text-emerald-800 font-extrabold px-1.5 py-0.5 rounded block">100% Compl.</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span className="text-sm font-black text-indigo-700 font-mono block">
+                                      ${hotel.pricePerNight}
+                                    </span>
+                                    <span className="text-[9px] text-slate-400 block">per night</span>
+                                  </>
+                                )}
                               </div>
                             </div>
 
@@ -1249,12 +1293,18 @@ export default function SeatReservationView({
                   <span className="font-bold">+${totalMealFee}</span>
                 </div>
               )}
-              {selectedHotel && totalHotelFee > 0 && (
-                <div className="flex items-center justify-between text-xs text-indigo-700 font-semibold bg-indigo-50/70 px-2.5 py-1.5 rounded-xl border border-indigo-100">
+              {selectedHotel && (
+                <div className={`flex items-center justify-between text-xs font-semibold px-2.5 py-1.5 rounded-xl border ${
+                  isHotelComplimentary
+                    ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                    : 'text-indigo-700 bg-indigo-50/70 border-indigo-100'
+                }`}>
                   <span className="truncate pr-2">
-                    🏨 Hotel Stay ({selectedHotel.name} • {selectedRoomTypeObj.name} • {hotelNights} {hotelNights === 1 ? 'night' : 'nights'}):
+                    🏨 Transit Hotel ({selectedHotel.name} • {selectedRoomTypeObj.name} • {hotelNights} {hotelNights === 1 ? 'night' : 'nights'}):
                   </span>
-                  <span className="font-black shrink-0">+${totalHotelFee}.00</span>
+                  <span className="font-black shrink-0">
+                    {isHotelComplimentary ? 'FREE ($0.00)' : `+$${totalHotelFee}.00`}
+                  </span>
                 </div>
               )}
               <div className="pt-2 border-t border-slate-200 flex items-center justify-between">

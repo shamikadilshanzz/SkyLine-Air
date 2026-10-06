@@ -54,6 +54,17 @@ public class RefundController {
                         "refund", existing.get(0)
                 ));
             }
+        } else if (refundRequest.getReservationId() != null) {
+            refundRequestRepository.findByReservationId(refundRequest.getReservationId()).ifPresent(existing -> {
+                // If exists, handled in condition below
+            });
+            var existing = refundRequestRepository.findByReservationId(refundRequest.getReservationId());
+            if (existing.isPresent()) {
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                        "message", "A refund request has already been submitted for reservation ID: " + refundRequest.getReservationId(),
+                        "refund", existing.get()
+                ));
+            }
         }
 
         if (refundRequest.getRefundReference() == null || refundRequest.getRefundReference().isEmpty()) {
@@ -68,6 +79,52 @@ public class RefundController {
         // Update corresponding reservation booking status to CANCELLED and restore available seats
         if (refundRequest.getPnr() != null && !refundRequest.getPnr().trim().isEmpty()) {
             reservationRepository.findByPnrCode(refundRequest.getPnr().trim()).ifPresent(res -> {
+                if (refundRequest.getReservationId() == null) {
+                    refundRequest.setReservationId(res.getReservationId());
+                }
+                if (refundRequest.getUserName() == null || refundRequest.getUserName().isBlank()) {
+                    refundRequest.setUserName(res.getUserName());
+                }
+                if (refundRequest.getUserEmail() == null || refundRequest.getUserEmail().isBlank()) {
+                    refundRequest.setUserEmail(res.getUserEmail());
+                }
+                if (refundRequest.getFlightNumber() == null || refundRequest.getFlightNumber().isBlank()) {
+                    refundRequest.setFlightNumber(res.getFlightNumber());
+                }
+                res.setBookingStatus("CANCELLED");
+                reservationRepository.save(res);
+
+                int passengerCount = (res.getPassengers() != null && !res.getPassengers().isEmpty()) ? res.getPassengers().size() : 1;
+                if (res.getFlightNumber() != null && !res.getFlightNumber().trim().isEmpty()) {
+                    flightRepository.findByFlightNumber(res.getFlightNumber().trim()).ifPresent(f -> {
+                        int total = f.getTotalSeats() != null ? f.getTotalSeats() : 60;
+                        int curr = f.getAvailableSeats() != null ? f.getAvailableSeats() : 0;
+                        f.setAvailableSeats(Math.min(total, curr + passengerCount));
+                        flightRepository.save(f);
+                    });
+                } else if (res.getFlightId() != null) {
+                    flightRepository.findById(res.getFlightId()).ifPresent(f -> {
+                        int total = f.getTotalSeats() != null ? f.getTotalSeats() : 60;
+                        int curr = f.getAvailableSeats() != null ? f.getAvailableSeats() : 0;
+                        f.setAvailableSeats(Math.min(total, curr + passengerCount));
+                        flightRepository.save(f);
+                    });
+                }
+            });
+        } else if (refundRequest.getReservationId() != null) {
+            reservationRepository.findById(refundRequest.getReservationId()).ifPresent(res -> {
+                if (refundRequest.getPnr() == null || refundRequest.getPnr().isBlank()) {
+                    refundRequest.setPnr(res.getPnrCode());
+                }
+                if (refundRequest.getUserName() == null || refundRequest.getUserName().isBlank()) {
+                    refundRequest.setUserName(res.getUserName());
+                }
+                if (refundRequest.getUserEmail() == null || refundRequest.getUserEmail().isBlank()) {
+                    refundRequest.setUserEmail(res.getUserEmail());
+                }
+                if (refundRequest.getFlightNumber() == null || refundRequest.getFlightNumber().isBlank()) {
+                    refundRequest.setFlightNumber(res.getFlightNumber());
+                }
                 res.setBookingStatus("CANCELLED");
                 reservationRepository.save(res);
 
@@ -102,6 +159,21 @@ public class RefundController {
                 existing.setStatus(newStatus);
                 if ("APPROVED".equalsIgnoreCase(newStatus) || "PROCESSED".equalsIgnoreCase(newStatus)) {
                     existing.setProcessedAt(LocalDateTime.now());
+                    
+                    // Synchronize linked reservation to CANCELLED and REFUNDED
+                    if (existing.getPnr() != null && !existing.getPnr().trim().isEmpty()) {
+                        reservationRepository.findByPnrCode(existing.getPnr().trim()).ifPresent(res -> {
+                            res.setBookingStatus("CANCELLED");
+                            res.setPaymentStatus("REFUNDED");
+                            reservationRepository.save(res);
+                        });
+                    } else if (existing.getReservationId() != null) {
+                        reservationRepository.findById(existing.getReservationId()).ifPresent(res -> {
+                            res.setBookingStatus("CANCELLED");
+                            res.setPaymentStatus("REFUNDED");
+                            reservationRepository.save(res);
+                        });
+                    }
                 }
             }
             RefundRequest saved = refundRequestRepository.save(existing);
