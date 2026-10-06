@@ -343,6 +343,14 @@ export default function ReservationManagementView({ currentRole, user }) {
       );
       setEditModalOpen(false);
       showToast(`Reservation ${editFormData.pnr} updated successfully in SQL database!`);
+      
+      const flightNum = editFormData.flightNumber;
+      if (flightNum) {
+        try {
+          localStorage.removeItem(`skyline_occupied_${flightNum}`);
+          window.dispatchEvent(new Event('skyline_seats_updated'));
+        } catch (e) {}
+      }
     } catch (err) {
       showToast(`Error updating reservation: ${err.message}`, 'error');
     } finally {
@@ -372,6 +380,14 @@ export default function ReservationManagementView({ currentRole, user }) {
       );
       setDeleteModalOpen(false);
       showToast(`Reservation PNR: ${selectedReservation.pnr} permanently deleted from SQL database.`, 'success');
+      
+      const flightNum = selectedReservation.flightNumber;
+      if (flightNum) {
+        try {
+          localStorage.removeItem(`skyline_occupied_${flightNum}`);
+          window.dispatchEvent(new Event('skyline_seats_updated'));
+        } catch (e) {}
+      }
       setSelectedReservation(null);
     } catch (err) {
       showToast(`Failed to delete reservation: ${err.message}`, 'error');

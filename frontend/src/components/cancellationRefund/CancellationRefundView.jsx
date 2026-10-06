@@ -106,6 +106,8 @@ export default function CancellationRefundView({ currentRole, user, onOpenAuth, 
           const apiRes = await fetchReservationsApi();
           if (apiRes && apiRes.length > 0) {
             formattedRes = apiRes.map((r) => ({
+              reservationId: r.reservationId || r.id,
+              id: r.reservationId || r.id,
               pnr: r.pnrCode || r.pnr,
               userId: r.userId,
               userName: r.userName || 'Passenger',
@@ -124,6 +126,7 @@ export default function CancellationRefundView({ currentRole, user, onOpenAuth, 
             formattedRefunds = apiRefunds.map((rf) => ({
               refundId: rf.refundReference || `RF-${rf.refundId}`,
               rawId: rf.refundId,
+              reservationId: rf.reservationId,
               pnr: rf.pnr || '',
               userName: rf.userName || '',
               userEmail: rf.userEmail || '',
@@ -158,6 +161,8 @@ export default function CancellationRefundView({ currentRole, user, onOpenAuth, 
             });
 
             formattedRes = userOnlyRes.map((r) => ({
+              reservationId: r.reservationId || r.id,
+              id: r.reservationId || r.id,
               pnr: r.pnrCode || r.pnr,
               userId: r.userId,
               userName: r.userName || user.name,
@@ -178,6 +183,7 @@ export default function CancellationRefundView({ currentRole, user, onOpenAuth, 
               formattedRefunds = userRefunds.map((rf) => ({
                 refundId: rf.refundReference || `RF-${rf.refundId}`,
                 rawId: rf.refundId,
+                reservationId: rf.reservationId,
                 pnr: rf.pnr || '',
                 userName: rf.userName || user.name,
                 userEmail: rf.userEmail || user.email,
@@ -256,6 +262,7 @@ export default function CancellationRefundView({ currentRole, user, onOpenAuth, 
 
     const newRefundItem = {
       refundId: generatedRefundId,
+      reservationId: selectedBooking?.reservationId || selectedBooking?.id || null,
       pnr: selectedBooking?.pnr || 'SK-784920',
       userName: selectedBooking?.userName || 'Alex Morgan',
       userEmail: selectedBooking?.userEmail || 'alex.morgan@skyline.com',
@@ -279,6 +286,7 @@ export default function CancellationRefundView({ currentRole, user, onOpenAuth, 
       const { createRefundRequestApi } = await import('../../api/apiService');
       const apiRes = await createRefundRequestApi({
         refundReference: generatedRefundId,
+        reservationId: selectedBooking?.reservationId || selectedBooking?.id || null,
         pnr: selectedBooking?.pnr || 'SK-784920',
         userName: selectedBooking?.userName || 'Alex Morgan',
         userEmail: selectedBooking?.userEmail || 'alex.morgan@skyline.com',

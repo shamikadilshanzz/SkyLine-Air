@@ -5,10 +5,10 @@
 -- ============================================================================
 
 -- Create and Use Database (Optional - uncomment if creating a new database)
--- CREATE DATABASE SkyLineAirDB;
--- GO
--- USE SkyLineAirDB;
--- GO
+CREATE DATABASE SkyLineAirDB;
+GO
+USE SkyLineAirDB;
+GO
 
 -- ----------------------------------------------------------------------------
 -- Drop Child and Parent Tables in Reverse Dependency Order

@@ -146,8 +146,15 @@ public class ReservationController {
 
         java.util.Set<String> occupied = new java.util.HashSet<>();
         for (Reservation r : flightReservations) {
-            // Cancelled bookings release their seats back to inventory
-            if ("CANCELLED".equalsIgnoreCase(r.getBookingStatus())) {
+            // Cancelled or refunded bookings release their seats back to inventory
+            String status = r.getBookingStatus();
+            if (status != null && (
+                    status.equalsIgnoreCase("CANCELLED") ||
+                    status.equalsIgnoreCase("REFUNDED") ||
+                    status.equalsIgnoreCase("REFUND_APPROVED") ||
+                    status.equalsIgnoreCase("CANCELLED_AND_REFUNDED") ||
+                    status.equalsIgnoreCase("CANCEL")
+            )) {
                 continue;
             }
             if (excludePnr != null && excludePnr.equalsIgnoreCase(r.getPnrCode())) {
@@ -201,8 +208,15 @@ public class ReservationController {
         if (reservation.getFlightNumber() != null && !reservation.getFlightNumber().trim().isEmpty() && reservation.getPassengers() != null) {
             List<Reservation> existingFlightRes = reservationRepository.findByFlightNumber(reservation.getFlightNumber().trim());
             for (Reservation existing : existingFlightRes) {
-                // Cancelled tickets release their seats
-                if ("CANCELLED".equalsIgnoreCase(existing.getBookingStatus())) {
+                // Cancelled or refunded tickets release their seats back to inventory
+                String status = existing.getBookingStatus();
+                if (status != null && (
+                        status.equalsIgnoreCase("CANCELLED") ||
+                        status.equalsIgnoreCase("REFUNDED") ||
+                        status.equalsIgnoreCase("REFUND_APPROVED") ||
+                        status.equalsIgnoreCase("CANCELLED_AND_REFUNDED") ||
+                        status.equalsIgnoreCase("CANCEL")
+                )) {
                     continue;
                 }
                 if (existing.getPassengers() != null) {

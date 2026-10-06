@@ -194,6 +194,9 @@ export default function HotelManagerPortal({ hotels = [], onHotelsUpdated, onBoo
   const [bookingSearch, setBookingSearch] = useState('');
   const [bookingStatusFilter, setBookingStatusFilter] = useState('ALL');
   const [editingBooking, setEditingBooking] = useState(null);
+  const [bookingToDelete, setBookingToDelete] = useState(null);
+  const [hotelToDelete, setHotelToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [bookingForm, setBookingForm] = useState({
     passengerName: '',
     guestEmail: '',
@@ -302,15 +305,20 @@ export default function HotelManagerPortal({ hotels = [], onHotelsUpdated, onBoo
     }
   };
 
-  const handleDeleteBooking = async (bookingId) => {
-    if (!window.confirm(`Delete booking record #${bookingId}?`)) return;
+  const confirmDeleteBooking = async () => {
+    if (!bookingToDelete) return;
+    const bId = bookingToDelete.hotelBookingId || bookingToDelete.id;
+    setIsDeleting(true);
     try {
-      await deleteHotelBookingApi(bookingId);
-      setBookings((prev) => prev.filter((b) => b.hotelBookingId !== bookingId && b.id !== bookingId));
-      showNotification('success', `Booking #${bookingId} deleted.`);
+      await deleteHotelBookingApi(bId);
+      setBookings((prev) => prev.filter((b) => b.hotelBookingId !== bId && b.id !== bId));
+      showNotification('success', `Hotel booking voucher ${bookingToDelete.voucherCode || `#${bId}`} was deleted from the SQL database.`);
+      setBookingToDelete(null);
       onBookingsUpdated && onBookingsUpdated();
     } catch (err) {
       showNotification('error', err.message || 'Could not delete booking.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -408,21 +416,24 @@ export default function HotelManagerPortal({ hotels = [], onHotelsUpdated, onBoo
     }
   };
 
-  const handleDelete = async (hotel) => {
-    if (!hotel.rawId) {
-      showNotification('error', 'This hotel has no database id and cannot be deleted.');
+  const confirmDeleteHotel = async () => {
+    if (!hotelToDelete) return;
+    if (!hotelToDelete.rawId) {
+      showNotification('error', 'This hotel has no database ID and cannot be deleted.');
+      setHotelToDelete(null);
       return;
     }
-    const confirmed = window.confirm(`Remove "${hotel.name}" from partner inventory? This cannot be undone.`);
-    if (!confirmed) return;
-
+    setIsDeleting(true);
     try {
-      await deleteHotelApi(hotel.rawId);
-      const remaining = hotels.filter((h) => h.rawId !== hotel.rawId);
+      await deleteHotelApi(hotelToDelete.rawId);
+      const remaining = hotels.filter((h) => h.rawId !== hotelToDelete.rawId);
       onHotelsUpdated && onHotelsUpdated(remaining);
-      showNotification('success', `${hotel.name} was removed from the database.`);
+      showNotification('success', `${hotelToDelete.name} was removed from the database.`);
+      setHotelToDelete(null);
     } catch (err) {
       showNotification('error', err.message || 'Cannot delete: hotel has existing bookings.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -609,8 +620,8 @@ export default function HotelManagerPortal({ hotels = [], onHotelsUpdated, onBoo
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleDelete(h)}
-                            className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg text-[11px] font-bold border border-red-200"
+                            onClick={() => setHotelToDelete(h)}
+                            className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg text-[11px] font-bold border border-red-200 cursor-pointer"
                           >
                             <Trash2 className="w-3.5 h-3.5 inline mr-1" />
                             Delete
@@ -774,8 +785,8 @@ export default function HotelManagerPortal({ hotels = [], onHotelsUpdated, onBoo
                         )}
                         <button
                           type="button"
-                          onClick={() => handleDeleteBooking(b.hotelBookingId || b.id)}
-                          className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-red-600"
+                          onClick={() => setBookingToDelete(b)}
+                          className="rounded-lg p-1 text-slate-400 hover:bg-red-50 hover:text-red-600 transition cursor-pointer"
                           title="Delete record"
                         >
                           <Trash2 className="h-3.5 w-3.5 inline" />
@@ -1091,6 +1102,190 @@ export default function HotelManagerPortal({ hotels = [], onHotelsUpdated, onBoo
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* 3. DELETE HOTEL BOOKING CONFIRMATION MODAL               */}
+      {/* ========================================================= */}
+      {bookingToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md overflow-hidden rounded-3xl bg-white p-6 shadow-2xl border border-slate-100 space-y-5 animate-in fade-in zoom-in duration-200">
+            {/* Header with red warning badge */}
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3.5">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-100 text-red-600 ring-4 ring-red-50">
+                  <Trash2 className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900 leading-tight">Delete Hotel Booking</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Permanent SQL database removal</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBookingToDelete(null)}
+                disabled={isDeleting}
+                className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Booking Details Card */}
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 space-y-2.5 text-xs">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-200/80">
+                <span className="font-semibold text-slate-500">Voucher Reference</span>
+                <span className="font-mono font-black text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-md border border-blue-100">
+                  {bookingToDelete.voucherCode || `HTV-${bookingToDelete.hotelBookingId || bookingToDelete.id}`}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Guest Passenger</span>
+                <span className="font-bold text-slate-900">{bookingToDelete.passengerName || 'Guest'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Hotel Name</span>
+                <span className="font-bold text-slate-900 truncate max-w-[200px]">
+                  {bookingToDelete.hotelName || 'Partner Hotel'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Room Category</span>
+                <span className="font-semibold text-slate-700">{bookingToDelete.roomType || 'Standard Transit Room'}</span>
+              </div>
+              <div className="flex items-center justify-between pt-1 border-t border-slate-200/80">
+                <span className="text-slate-500">Booking Price</span>
+                <span className="font-bold text-slate-900">
+                  {bookingToDelete.isComplimentary ? (
+                    <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md font-extrabold border border-emerald-200">
+                      100% Free Layover ($0.00)
+                    </span>
+                  ) : (
+                    <span className="font-mono font-extrabold text-blue-700">${bookingToDelete.amount || 0}.00</span>
+                  )}
+                </span>
+              </div>
+            </div>
+
+            {/* Red alert warning notice */}
+            <div className="flex items-start gap-2.5 rounded-2xl border border-red-200 bg-red-50/80 p-3.5 text-xs text-red-700">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-red-600 mt-0.5" />
+              <p className="font-semibold leading-relaxed">
+                Are you sure you want to delete hotel booking record <strong>#{bookingToDelete.hotelBookingId || bookingToDelete.id}</strong>? This action cannot be undone and will permanently remove this voucher and free up partner room inventory.
+              </p>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => setBookingToDelete(null)}
+                disabled={isDeleting}
+                className="flex-1 rounded-xl border border-slate-200 bg-white py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
+              >
+                Keep Record
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteBooking}
+                disabled={isDeleting}
+                className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 py-2.5 text-xs font-extrabold text-white shadow-md shadow-red-600/25 hover:from-red-700 hover:to-rose-700 transition disabled:opacity-50 cursor-pointer"
+              >
+                {isDeleting ? (
+                  <>
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Confirm Delete
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* 4. DELETE PARTNER HOTEL CONFIRMATION MODAL               */}
+      {/* ========================================================= */}
+      {hotelToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md overflow-hidden rounded-3xl bg-white p-6 shadow-2xl border border-slate-100 space-y-5 animate-in fade-in zoom-in duration-200">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3.5">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-100 text-red-600 ring-4 ring-red-50">
+                  <Building2 className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900 leading-tight">Remove Partner Hotel</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Partner inventory removal</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHotelToDelete(null)}
+                disabled={isDeleting}
+                className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 space-y-2.5 text-xs">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-200/80">
+                <span className="font-semibold text-slate-500">Hotel Name</span>
+                <span className="font-bold text-slate-900">{hotelToDelete.name}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Location / Airport</span>
+                <span className="font-bold text-slate-900">{hotelToDelete.city}, {hotelToDelete.country} ({hotelToDelete.airportCode})</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Base Nightly Rate</span>
+                <span className="font-mono font-bold text-blue-600">${hotelToDelete.pricePerNight} / night</span>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-2.5 rounded-2xl border border-red-200 bg-red-50/80 p-3.5 text-xs text-red-700">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-red-600 mt-0.5" />
+              <p className="font-semibold leading-relaxed">
+                Are you sure you want to remove <strong>{hotelToDelete.name}</strong> from partner inventory? Hotels with active guest bookings cannot be deleted until those bookings are resolved.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => setHotelToDelete(null)}
+                disabled={isDeleting}
+                className="flex-1 rounded-xl border border-slate-200 bg-white py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteHotel}
+                disabled={isDeleting}
+                className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 py-2.5 text-xs font-extrabold text-white shadow-md shadow-red-600/25 hover:from-red-700 hover:to-rose-700 transition disabled:opacity-50 cursor-pointer"
+              >
+                {isDeleting ? (
+                  <>
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    Removing...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Yes, Remove Hotel
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

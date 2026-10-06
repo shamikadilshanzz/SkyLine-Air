@@ -194,6 +194,7 @@ export default function SeatReservationView({
       const flightRawId = selectedFlight?.rawId || selectedFlight?.flightId || (selectedFlight?.id && !String(selectedFlight.id).startsWith('FL-') ? selectedFlight.id : null);
       
       const foundOccupied = new Set();
+      let apiSuccess = false;
 
       // 1. Try dedicated live occupied-seats endpoint
       try {
@@ -201,6 +202,7 @@ export default function SeatReservationView({
         const apiData = await fetchOccupiedSeatsApi(flightNum, flightRawId);
         if (Array.isArray(apiData)) {
           apiData.forEach(s => s && foundOccupied.add(String(s).trim().toUpperCase()));
+          apiSuccess = true;
         }
       } catch (err) {
         console.warn('[SeatReservationView] Direct occupied seats API notice:', err.message);
@@ -214,7 +216,9 @@ export default function SeatReservationView({
           allRes.forEach(r => {
             const isMatch = (flightNum && r.flightNumber && r.flightNumber.toUpperCase() === flightNum.toUpperCase()) ||
                             (flightRawId && r.flightId === flightRawId);
-            if (isMatch && r.bookingStatus !== 'CANCELLED') {
+            const statusUpper = String(r.bookingStatus || '').toUpperCase();
+            const isCancelled = statusUpper === 'CANCELLED' || statusUpper === 'REFUNDED' || statusUpper === 'REFUND_APPROVED' || statusUpper === 'CANCELLED_AND_REFUNDED' || statusUpper === 'CANCEL';
+            if (isMatch && !isCancelled) {
               if (r.passengers && Array.isArray(r.passengers)) {
                 r.passengers.forEach(p => {
                   if (p.seatNumber) foundOccupied.add(String(p.seatNumber).trim().toUpperCase());
@@ -223,13 +227,14 @@ export default function SeatReservationView({
               }
             }
           });
+          apiSuccess = true;
         }
       } catch (err) {
         console.warn('[SeatReservationView] Reservations fallback notice:', err.message);
       }
 
-      // 3. Check local storage cache
-      if (flightNum) {
+      // 3. Fallback ONLY if backend API is completely unreachable
+      if (!apiSuccess && flightNum) {
         try {
           const cached = JSON.parse(localStorage.getItem(`skyline_occupied_${flightNum}`) || '[]');
           if (Array.isArray(cached)) {
@@ -242,8 +247,8 @@ export default function SeatReservationView({
         const list = Array.from(foundOccupied);
         setOccupiedSeats(list);
 
-        // Update local storage cache to keep it in sync
-        if (flightNum && list.length > 0) {
+        // Synchronize local storage cache to match authoritative backend state
+        if (flightNum) {
           try {
             localStorage.setItem(`skyline_occupied_${flightNum}`, JSON.stringify(list));
           } catch (e) {}
@@ -1007,11 +1012,11 @@ export default function SeatReservationView({
                       <h4 className="text-xs font-black text-slate-900 tracking-tight">
                         Hotel Accommodation in {activeCountry}
                       </h4>
-                      {flightHasLayover && layoverHours >= 8 ? (
-                        <span className="text-[10px] bg-emerald-500 text-white font-black px-2.5 py-0.5 rounded-full shadow-xs flex items-center gap-1">
+                      {/* {flightHasLayover && layoverHours >= 8 ? ( */}
+                        {/* <span className="text-[10px] bg-emerald-500 text-white font-black px-2.5 py-0.5 rounded-full shadow-xs flex items-center gap-1">
                           <Sparkles className="w-3 h-3 text-amber-300" /> 100% Complimentary Transit Stay (Layover {layoverHours}h ≥ 8h)
-                        </span>
-                      ) : isLongFlight ? (
+                        </span>} */}
+                      {isLongFlight ? (
                         <span className="text-[10px] bg-amber-400 text-slate-950 font-black px-2 py-0.5 rounded-full shadow-xs flex items-center gap-1">
                           <Sparkles className="w-3 h-3" /> Long-Haul Flight ({selectedFlight?.duration || '6h+'})
                         </span>

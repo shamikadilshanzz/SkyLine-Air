@@ -11,4 +11,5 @@ public interface RefundRequestRepository extends JpaRepository<RefundRequest, Lo
     Optional<RefundRequest> findByRefundReference(String refundReference);
     List<RefundRequest> findByUserEmail(String userEmail);
     List<RefundRequest> findByPnr(String pnr);
+    Optional<RefundRequest> findByReservationId(Long reservationId);
 }

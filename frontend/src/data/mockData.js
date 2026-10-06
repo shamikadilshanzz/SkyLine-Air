@@ -25,11 +25,13 @@ export const INITIAL_AIRCRAFT = [
 ];
 
 export const PLANE_PHOTO_PRESETS = [
-  { label: 'Boeing 787 Dreamliner (Sky Blue)', url: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?auto=format&fit=crop&w=800&q=80' },
-  { label: 'Airbus A350-900 (Cruising Sky)', url: 'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=800&q=80' },
-  { label: 'Boeing 777-300ER (Sunset Jet)', url: 'https://images.unsplash.com/photo-1519074069444-1ba4eff56022?auto=format&fit=crop&w=800&q=80' },
-  { label: 'Airbus A320neo (Modern Commercial)', url: 'https://images.unsplash.com/photo-1520437358207-323b43b50729?auto=format&fit=crop&w=800&q=80' },
-  { label: 'Executive Jet (Gold Livery)', url: 'https://images.unsplash.com/photo-1559297434-fae8a1916a79?auto=format&fit=crop&w=800&q=80' }
+  { label: 'Boeing 787 Dreamliner', model: 'Boeing 787-9 Dreamliner', tag: 'Sky Blue', url: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRJCtmR_0RJsRbp7KKZvWGTUoQkxl7TkgA7nMv8jOWuU-Y4ss_pEqxAxw5s&s=10' },
+  { label: 'Airbus A350-900', model: 'Airbus A350-900', tag: 'Cruising Sky', url: 'https://images6.alphacoders.com/740/thumb-1920-740973.jpg' },
+  { label: 'Boeing 777-300ER', model: 'Boeing 777-300ER', tag: 'Sunset Jet', url: 'https://images7.alphacoders.com/742/thumb-1920-742688.jpg' },
+  { label: 'Airbus A320neo', model: 'Airbus A320neo', tag: 'Modern Livery', url: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTKNvaFaDFFETQGvtsgPvo-NfDU7Zu9c0F8RevidtMYgHURZaaoD7g-Gz8E&s=10' },
+  { label: 'Airbus A330-300', model: 'Airbus A330-300', tag: 'Twin-Aisle Widebody', url: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRSiMdWMf-rBuBRVzNqqZely8V6oXl0ZNxdXE-a5kXQvPoPkOBPQeN_NmRJ&s=10' },
+  { label: 'Executive Jet', model: 'Bombardier Global 7500', tag: 'Gold VIP Livery', url: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQDO44ML4CBQXQD9fAjda7tY6W-6e6yCF_yL6mhculWhX7hsnjH-BB_lJA&s=10' },
+  { label: 'Boeing 747-8', model: 'Boeing 747-8', tag: 'Queen of the Skies', url: 'https://cdn.aeroreport.de/media/pages/good-to-know/boeing-747-die-koenigin-der-luefte/kopf/2e9ed6bce3-1760429390/r6dqzp_747_exp_aerial_02b_post_2048px-2000x.webp' }
 ];
 
 export const INITIAL_FLIGHTS = [
