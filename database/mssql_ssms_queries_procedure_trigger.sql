@@ -1,111 +1,4 @@
--- ============================================================================
--- SLIIT IT2140 : Database Design and Development (Assignment 01 - Part 02)
--- Project: SkyLine Air - Advanced SQL Scripts
--- Target DBMS: Microsoft SQL Server (SSMS / T-SQL Dialect)
--- Structure:
---   PART A: ISA Hierarchy Mapping Justification
---   PART D: SQL Queries & Outputs (5 Core Queries)
---   PART E: Stored Procedures / Functions (Complete for all 6 Members)
---   PART F: Database Triggers (Complete for all 6 Members)
--- ============================================================================
 
--- ============================================================================
--- PART A: ISA HIERARCHY MAPPING JUSTIFICATION (Documentation)
--- ============================================================================
-/*
-In our EER model, USER is a superclass entity with four disjoint subtypes:
-  1. PASSENGER (has frequent_flyer_number, loyalty_points, preferences)
-  2. TICKETING_OFFICER (manages reservations and passenger records)
-  3. AIRLINE_ADMINISTRATOR (manages fleet, flights, and system configurations)
-  4. HOTEL_MANAGER (manages partner hotel inventory and transit bookings)
-
-Mapping Choice: Single-Table (Union) Inheritance Strategy
-Reason for Choice:
-  - All four subtypes share approximately 80% of common attributes (user_id, email,
-    password_hash, first_name, last_name, phone, address, nationality, passport info).
-  - Authentication and login require querying only a single table (dbo.users) using email 
-    and password without executing expensive multi-table JOINs or UNION queries.
-  - Role-based authorization is straightforwardly managed using a single `role` discriminator column.
-*/
-
--- ============================================================================
--- PART D: SQL QUERIES & OUTPUTS (20%)
--- ============================================================================
-
--- Query 1: Simple SELECT with Filtering and Sorting
--- Purpose: Retrieve all active Boeing and Airbus aircraft with more than 200 economy seats
-SELECT aircraft_id, model, tail_number, economy_seats, business_seats, status 
-FROM dbo.aircraft 
-WHERE economy_seats >= 200 AND status = 'ACTIVE' 
-ORDER BY economy_seats DESC;
-
--- Query 2: Multi-Table INNER JOIN
--- Purpose: Fetch comprehensive flight booking details including user name, flight number, route, and cabin class
-SELECT 
-    r.pnr_code,
-    u.first_name,
-    u.last_name,
-    u.email,
-    f.flight_number,
-    f.origin_code,
-    f.destination_code,
-    r.cabin_class,
-    r.total_amount,
-    r.booking_status
-FROM dbo.reservations r
-INNER JOIN dbo.users u ON r.user_id = u.user_id
-INNER JOIN dbo.flights f ON r.flight_id = f.flight_id
-ORDER BY r.booking_date DESC;
-
--- Query 3: Aggregate Functions (COUNT, SUM, AVG, MIN, MAX)
--- Purpose: Calculate overall airline revenue metrics and average ticket fare from confirmed bookings
-SELECT 
-    COUNT(reservation_id) AS total_confirmed_bookings,
-    SUM(total_amount) AS total_revenue,
-    AVG(total_amount) AS average_ticket_fare,
-    MIN(total_amount) AS lowest_fare_booked,
-    MAX(total_amount) AS highest_fare_booked
-FROM dbo.reservations
-WHERE booking_status = 'CONFIRMED';
-
--- Query 4: GROUP BY with HAVING Clause
--- Purpose: Find partner hotels that have handled transit bookings and calculate total hotel revenue
-SELECT 
-    h.hotel_id,
-    h.name AS hotel_name,
-    h.city,
-    COUNT(hb.hotel_booking_id) AS total_bookings_count,
-    SUM(hb.amount) AS total_revenue_generated
-FROM dbo.hotels h
-INNER JOIN dbo.hotel_bookings hb ON h.hotel_id = hb.hotel_id
-GROUP BY h.hotel_id, h.name, h.city
-HAVING COUNT(hb.hotel_booking_id) >= 1
-ORDER BY total_revenue_generated DESC;
-
--- Query 5: Subquery (Scalar & IN Subquery)
--- Purpose: Identify users whose total flight spending exceeds the average spending of all users
-SELECT 
-    u.user_id,
-    u.first_name,
-    u.last_name,
-    u.email,
-    u.loyalty_tier,
-    (SELECT SUM(r.total_amount) FROM dbo.reservations r WHERE r.user_id = u.user_id) AS total_spent
-FROM dbo.users u
-WHERE u.user_id IN (
-    SELECT r.user_id 
-    FROM dbo.reservations r 
-    GROUP BY r.user_id 
-    HAVING SUM(r.total_amount) > (SELECT AVG(total_amount) FROM dbo.reservations)
-);
-GO
-
-
--- ============================================================================
--- ============================================================================
--- PART E: STORED PROCEDURES / FUNCTIONS (15%) - ALL 6 GROUP MEMBERS
--- ============================================================================
--- ============================================================================
 
 -- ----------------------------------------------------------------------------
 -- MEMBER 1: SEARCH FLIGHT MODULE
@@ -151,11 +44,11 @@ END;
 GO
 
 -- Member 1 Execution & Test:
--- SELECT flight_id, flight_number, base_price_economy,
---        dbo.fn_CalculateDynamicFare(flight_id, 'ECONOMY') AS dynamic_economy_price,
---        dbo.fn_CalculateDynamicFare(flight_id, 'BUSINESS') AS dynamic_business_price
--- FROM dbo.flights;
--- GO
+SELECT flight_id, flight_number, base_price_economy,
+       dbo.fn_CalculateDynamicFare(flight_id, 'ECONOMY') AS dynamic_economy_price,
+       dbo.fn_CalculateDynamicFare(flight_id, 'BUSINESS') AS dynamic_business_price
+FROM dbo.flights;
+GO
 
 
 -- ----------------------------------------------------------------------------
@@ -223,15 +116,15 @@ END;
 GO
 
 -- Member 2 Execution & Test:
--- DECLARE @out_pnr VARCHAR(10);
--- EXEC dbo.sp_CreateFlightReservation 
---     @p_user_id = 1, 
---     @p_flight_id = 1, 
---     @p_cabin_class = 'ECONOMY', 
---     @p_passenger_count = 2, 
---     @p_contact_email = 'shamikadilshan@gmail.com', 
---     @p_new_pnr = @out_pnr OUTPUT;
--- GO
+DECLARE @out_pnr VARCHAR(10);
+EXEC dbo.sp_CreateFlightReservation 
+    @p_user_id = 1, 
+    @p_flight_id = 1, 
+    @p_cabin_class = 'ECONOMY', 
+    @p_passenger_count = 2, 
+    @p_contact_email = 'shamikadilshan@gmail.com', 
+    @p_new_pnr = @out_pnr OUTPUT;
+GO
 
 
 -- ----------------------------------------------------------------------------
@@ -271,8 +164,8 @@ END;
 GO
 
 -- Member 3 Execution & Test:
--- EXEC dbo.sp_ProcessOnlineCardPayment @p_reservation_id = 1, @p_payment_method = 'CREDIT_CARD', @p_amount = 700.00;
--- GO
+EXEC dbo.sp_ProcessOnlineCardPayment @p_reservation_id = 1, @p_payment_method = 'CREDIT_CARD', @p_amount = 700.00;
+GO
 
 
 -- ----------------------------------------------------------------------------
@@ -336,8 +229,8 @@ END;
 GO
 
 -- Member 4 Execution & Test:
--- EXEC dbo.sp_ProcessTicketRefund @in_refund_id = 3, @in_admin_decision = 'APPROVED';
--- GO
+EXEC dbo.sp_ProcessTicketRefund @in_refund_id = 3, @in_admin_decision = 'APPROVED';
+GO
 
 
 -- ----------------------------------------------------------------------------
@@ -372,12 +265,12 @@ END;
 GO
 
 -- Member 5 Execution & Test:
--- EXEC dbo.sp_UpdateFlightScheduleStatus 
---     @p_flight_id = 1, 
---     @p_new_departure = '2026-10-10 14:00:00', 
---     @p_new_arrival = '2026-10-10 18:30:00', 
---     @p_new_status = 'DELAYED';
--- GO
+EXEC dbo.sp_UpdateFlightScheduleStatus 
+    @p_flight_id = 1, 
+    @p_new_departure = '2026-10-10 14:00:00', 
+    @p_new_arrival = '2026-10-10 18:30:00', 
+    @p_new_status = 'DELAYED';
+GO
 
 
 -- ----------------------------------------------------------------------------
@@ -461,20 +354,16 @@ END;
 GO
 
 -- Member 6 Execution & Test:
--- EXEC dbo.sp_BookLayoverTransitHotel
---     @p_reservation_id = 2,
---     @p_hotel_id = 1,
---     @p_room_type = 'Deluxe Transit Suite',
---     @p_check_in = '2026-10-15',
---     @p_check_out = '2026-10-16';
--- GO
+EXEC dbo.sp_BookLayoverTransitHotel
+    @p_reservation_id = 2,
+    @p_hotel_id = 1,
+    @p_room_type = 'Deluxe Transit Suite',
+    @p_check_in = '2026-10-15',
+    @p_check_out = '2026-10-16';
+GO
 
 
--- ============================================================================
--- ============================================================================
 -- PART F: DATABASE TRIGGERS (15%) - ALL 6 GROUP MEMBERS
--- ============================================================================
--- ============================================================================
 
 -- ----------------------------------------------------------------------------
 -- MEMBER 1: SEARCH FLIGHT MODULE
@@ -505,9 +394,9 @@ END;
 GO
 
 -- Member 1 Trigger Test (Demonstrating Validation Rollback):
--- INSERT INTO dbo.flights (flight_number, origin_code, destination_code, departure_time, arrival_time, base_price_economy, base_price_business, base_price_first)
--- VALUES ('SK-ERR01', 'CMB', 'DXB', '2026-11-01 10:00:00', '2026-11-01 08:00:00', 300, 600, 1000);
--- GO
+INSERT INTO dbo.flights (flight_number, origin_code, destination_code, departure_time, arrival_time, base_price_economy, base_price_business, base_price_first)
+VALUES ('SK-ERR01', 'CMB', 'DXB', '2026-11-01 10:00:00', '2026-11-01 08:00:00', 300, 600, 1000);
+GO
 
 
 -- ----------------------------------------------------------------------------
@@ -537,11 +426,11 @@ END;
 GO
 
 -- Member 2 Trigger Test:
--- SELECT flight_id, available_seats FROM dbo.flights WHERE flight_id = 1;
--- INSERT INTO dbo.reservations (pnr_code, user_id, flight_id, cabin_class, total_amount, booking_status)
--- VALUES ('TEST-PNR1', 1, 1, 'ECONOMY', 350.00, 'CONFIRMED');
--- SELECT flight_id, available_seats FROM dbo.flights WHERE flight_id = 1;
--- GO
+SELECT flight_id, available_seats FROM dbo.flights WHERE flight_id = 1;
+INSERT INTO dbo.reservations (pnr_code, user_id, flight_id, cabin_class, total_amount, booking_status)
+VALUES ('TEST-PNR1', 1, 1, 'ECONOMY', 350.00, 'CONFIRMED');
+SELECT flight_id, available_seats FROM dbo.flights WHERE flight_id = 1;
+GO
 
 
 -- ----------------------------------------------------------------------------
@@ -570,11 +459,11 @@ END;
 GO
 
 -- Member 3 Trigger Test:
--- SELECT user_id, first_name, loyalty_points FROM dbo.users WHERE user_id = 1;
--- INSERT INTO dbo.payments (reservation_id, transaction_reference, payment_method, amount, payment_status)
--- VALUES (1, 'TXN-PTS-DEMO', 'CREDIT_CARD', 500.00, 'SUCCESS');
--- SELECT user_id, first_name, loyalty_points FROM dbo.users WHERE user_id = 1;
--- GO
+SELECT user_id, first_name, loyalty_points FROM dbo.users WHERE user_id = 1;
+INSERT INTO dbo.payments (reservation_id, transaction_reference, payment_method, amount, payment_status)
+VALUES (1, 'TXN-PTS-DEMO', 'CREDIT_CARD', 500.00, 'SUCCESS');
+SELECT user_id, first_name, loyalty_points FROM dbo.users WHERE user_id = 1;
+GO
 
 
 -- ----------------------------------------------------------------------------
@@ -610,10 +499,10 @@ END;
 GO
 
 -- Member 4 Trigger Test:
--- SELECT f.flight_id, f.available_seats FROM dbo.flights f WHERE f.flight_id = 1;
--- UPDATE dbo.refund_requests SET status = 'APPROVED' WHERE refund_id = 1;
--- SELECT f.flight_id, f.available_seats FROM dbo.flights f WHERE f.flight_id = 1;
--- GO
+SELECT f.flight_id, f.available_seats FROM dbo.flights f WHERE f.flight_id = 1;
+UPDATE dbo.refund_requests SET status = 'APPROVED' WHERE refund_id = 1;
+SELECT f.flight_id, f.available_seats FROM dbo.flights f WHERE f.flight_id = 1;
+GO
 
 
 -- ----------------------------------------------------------------------------
@@ -646,15 +535,15 @@ END;
 GO
 
 -- Member 5 Trigger Test:
--- 1. Check current reservations for Flight 1
--- SELECT reservation_id, pnr_code, flight_id, booking_status FROM dbo.reservations WHERE flight_id = 1;
+1. Check current reservations for Flight 1
+SELECT reservation_id, pnr_code, flight_id, booking_status FROM dbo.reservations WHERE flight_id = 1;
 
 -- 2. Admin cancels the flight schedule
--- UPDATE dbo.flights SET status = 'CANCELLED' WHERE flight_id = 1;
+UPDATE dbo.flights SET status = 'CANCELLED' WHERE flight_id = 1;
 
 -- 3. Check reservations again (All bookings on Flight 1 are automatically changed to CANCELLED!)
--- SELECT reservation_id, pnr_code, flight_id, booking_status FROM dbo.reservations WHERE flight_id = 1;
--- GO
+SELECT reservation_id, pnr_code, flight_id, booking_status FROM dbo.reservations WHERE flight_id = 1;
+GO
 
 
 -- ----------------------------------------------------------------------------
@@ -685,8 +574,8 @@ END;
 GO
 
 -- Member 6 Trigger Test:
--- SELECT hotel_id, name, available_rooms FROM dbo.hotels WHERE hotel_id = 1;
--- INSERT INTO dbo.hotel_bookings (hotel_id, hotel_name, user_id, guest_email, voucher_code, reservation_id, room_type, amount, booking_status)
--- VALUES (1, 'Dubai International Airport Hotel', 1, 'guest@test.com', 'HTL-TEST01', 1, 'Deluxe Suite', 0.00, 'CONFIRMED');
--- SELECT hotel_id, name, available_rooms FROM dbo.hotels WHERE hotel_id = 1;
--- GO
+SELECT hotel_id, name, available_rooms FROM dbo.hotels WHERE hotel_id = 1;
+INSERT INTO dbo.hotel_bookings (hotel_id, hotel_name, user_id, guest_email, voucher_code, reservation_id, room_type, amount, booking_status)
+VALUES (1, 'Dubai International Airport Hotel', 1, 'guest@test.com', 'HTL-TEST01', 1, 'Deluxe Suite', 0.00, 'CONFIRMED');
+SELECT hotel_id, name, available_rooms FROM dbo.hotels WHERE hotel_id = 1;
+GO

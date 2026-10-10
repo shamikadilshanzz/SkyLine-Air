@@ -41,6 +41,7 @@ export default function UserProfileView({ user, onUpdateUser, onOpenAuth, onNavi
 
   // Card add form modal
   const [showAddCardModal, setShowAddCardModal] = useState(false);
+  const [cardModalError, setCardModalError] = useState('');
   const [newCard, setNewCard] = useState({
     cardHolder: user?.name || '',
     cardNumber: '',
@@ -168,16 +169,56 @@ export default function UserProfileView({ user, onUpdateUser, onOpenAuth, onNavi
 
   const handleAddCard = async (e) => {
     e.preventDefault();
-    if (!newCard.cardNumber || !newCard.expiry || !newCard.cvv) return;
-    const last4 = newCard.cardNumber.replace(/\D/g, '').slice(-4) || '9999';
+    setCardModalError('');
+
+    // 1. Validate Cardholder Name
+    if (!newCard.cardHolder || newCard.cardHolder.trim().length < 2) {
+      setCardModalError('Please enter a valid Cardholder Name (at least 2 characters).');
+      return;
+    }
+
+    // 2. Validate Card Number (must be exactly 16 digits)
+    const rawCardNumber = (newCard.cardNumber || '').replace(/\D/g, '');
+    if (rawCardNumber.length !== 16) {
+      setCardModalError(`Card number must be exactly 16 digits (currently ${rawCardNumber.length} digits).`);
+      return;
+    }
+
+    // 3. Validate Expiry Date (MM/YY)
+    const expiryTrimmed = (newCard.expiry || '').trim();
+    const expiryMatch = expiryTrimmed.match(/^(0[1-9]|1[0-2])\/?([0-9]{2})$/);
+    if (!expiryMatch) {
+      setCardModalError('Please enter a valid Expiry Date in MM/YY format (e.g. 08/28 with month 01-12).');
+      return;
+    }
+
+    const expMonth = parseInt(expiryMatch[1], 10);
+    const expYear = parseInt('20' + expiryMatch[2], 10);
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+
+    if (expYear < currentYear || (expYear === currentYear && expMonth < currentMonth)) {
+      setCardModalError('This card has already expired. Please enter a valid future expiry date.');
+      return;
+    }
+
+    // 4. Validate CVV (3 or 4 digits)
+    const rawCvv = (newCard.cvv || '').replace(/\D/g, '');
+    if (rawCvv.length < 3 || rawCvv.length > 4) {
+      setCardModalError('CVV / CVC security code must be 3 or 4 digits.');
+      return;
+    }
+
+    const last4 = rawCardNumber.slice(-4) || '9999';
     const rawUserId = user?.rawId || (user?.id ? parseInt(String(user.id).replace(/\D/g, '')) : 1) || 1;
     let cardObj = {
       id: `card-${Date.now()}`,
       cardType: newCard.cardType,
       last4: last4,
-      cardHolder: newCard.cardHolder || formData.name,
-      expiry: newCard.expiry,
-      cvv: newCard.cvv,
+      cardHolder: newCard.cardHolder.trim(),
+      expiry: `${expiryMatch[1]}/${expiryMatch[2]}`,
+      cvv: rawCvv,
       isDefault: (formData.savedCards || []).length === 0
     };
 
@@ -186,10 +227,10 @@ export default function UserProfileView({ user, onUpdateUser, onOpenAuth, onNavi
       const savedApiCard = await saveUserCardApi({
         userId: rawUserId,
         cardType: newCard.cardType,
-        cardHolder: newCard.cardHolder || formData.name,
+        cardHolder: newCard.cardHolder.trim(),
         last4: last4,
-        expiry: newCard.expiry,
-        cvv: newCard.cvv,
+        expiry: `${expiryMatch[1]}/${expiryMatch[2]}`,
+        cvv: rawCvv,
         isDefault: (formData.savedCards || []).length === 0
       });
       if (savedApiCard) cardObj = savedApiCard;
@@ -200,7 +241,8 @@ export default function UserProfileView({ user, onUpdateUser, onOpenAuth, onNavi
         setFormData(updated);
         if (onUpdateUser) onUpdateUser(updated);
         setShowAddCardModal(false);
-        setNewCard({ cardHolder: formData.name, cardNumber: '', expiry: '', cvv: '', cardType: 'Visa' });
+        setCardModalError('');
+        setNewCard({ cardHolder: formData.name || user?.name || '', cardNumber: '', expiry: '', cvv: '', cardType: 'Visa' });
         setToastMessage('New payment card saved securely in SQL database!');
         setShowSaveToast(true);
         setTimeout(() => setShowSaveToast(false), 3500);
@@ -215,7 +257,8 @@ export default function UserProfileView({ user, onUpdateUser, onOpenAuth, onNavi
     setFormData(updated);
     if (onUpdateUser) onUpdateUser(updated);
     setShowAddCardModal(false);
-    setNewCard({ cardHolder: formData.name, cardNumber: '', expiry: '', cvv: '', cardType: 'Visa' });
+    setCardModalError('');
+    setNewCard({ cardHolder: formData.name || user?.name || '', cardNumber: '', expiry: '', cvv: '', cardType: 'Visa' });
     setToastMessage('New payment card saved securely in SQL database!');
     setShowSaveToast(true);
     setTimeout(() => setShowSaveToast(false), 3500);
@@ -954,12 +997,22 @@ export default function UserProfileView({ user, onUpdateUser, onOpenAuth, onNavi
                     <h3 className="text-base font-extrabold text-slate-900">Add New Payment Card</h3>
                     
                     <form onSubmit={handleAddCard} className="space-y-3">
+                      {cardModalError && (
+                        <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-600 font-semibold flex items-center gap-2 animate-in fade-in">
+                          <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
+                          <span>{cardModalError}</span>
+                        </div>
+                      )}
+
                       <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1">Card Network</label>
                         <select
                           value={newCard.cardType}
-                          onChange={(e) => setNewCard({ ...newCard, cardType: e.target.value })}
-                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                          onChange={(e) => {
+                            setCardModalError('');
+                            setNewCard({ ...newCard, cardType: e.target.value });
+                          }}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                         >
                           <option value="Visa">Visa</option>
                           <option value="Mastercard">Mastercard</option>
@@ -968,52 +1021,70 @@ export default function UserProfileView({ user, onUpdateUser, onOpenAuth, onNavi
                       </div>
 
                       <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">Cardholder Name</label>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Cardholder Full Name</label>
                         <input
                           type="text"
+                          placeholder="e.g. Johnathan Doe"
                           value={newCard.cardHolder}
-                          onChange={(e) => setNewCard({ ...newCard, cardHolder: e.target.value })}
-                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                          onChange={(e) => {
+                            setCardModalError('');
+                            setNewCard({ ...newCard, cardHolder: e.target.value });
+                          }}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500"
                           required
                         />
                       </div>
 
                       <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">Card Number</label>
+                        <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                          <span>Card Number (16 Digits)</span>
+                          <span className="text-[10px] text-slate-400 font-normal">16 numeric digits required</span>
+                        </label>
                         <input
                           type="text"
-                          placeholder="4532 •••• •••• 8821"
+                          placeholder="4532 8901 2345 6789"
                           maxLength={19}
                           value={newCard.cardNumber}
-                          onChange={(e) => setNewCard({ ...newCard, cardNumber: e.target.value })}
-                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono"
+                          onChange={(e) => {
+                            setCardModalError('');
+                            // Extract digits only and limit to 16
+                            const digits = e.target.value.replace(/\D/g, '').slice(0, 16);
+                            // Group into 4 digits chunks (XXXX XXXX XXXX XXXX)
+                            const formatted = digits.match(/.{1,4}/g)?.join(' ') || digits;
+                            setNewCard({ ...newCard, cardNumber: formatted });
+                          }}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono tracking-wider focus:ring-2 focus:ring-blue-500"
                           required
                         />
                       </div>
 
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1">Expiry Date (MM/YY)</label>
+                          <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                            <span>Expiry (MM/YY)</span>
+                            <span className="text-[10px] text-slate-400 font-normal">MM / YY</span>
+                          </label>
                           <input
                             type="text"
                             placeholder="12/28"
                             maxLength={5}
                             value={newCard.expiry}
                             onChange={(e) => {
-                              let val = e.target.value.replace(/[^\d/]/g, '');
-                              if (val.length === 2 && !val.includes('/') && newCard.expiry.length < 2) {
-                                val = val + '/';
+                              setCardModalError('');
+                              let val = e.target.value.replace(/[^\d]/g, '').slice(0, 4);
+                              if (val.length >= 3) {
+                                val = val.slice(0, 2) + '/' + val.slice(2);
                               }
                               setNewCard({ ...newCard, expiry: val });
                             }}
-                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono"
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:ring-2 focus:ring-blue-500"
                             required
                           />
                         </div>
 
                         <div>
                           <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
-                            <span>CVV / CVC Code</span>
+                            <span>CVV / CVC</span>
                             <span className="text-[10px] text-slate-400 font-normal">3-4 digits</span>
                           </label>
                           <input
@@ -1021,8 +1092,11 @@ export default function UserProfileView({ user, onUpdateUser, onOpenAuth, onNavi
                             placeholder="•••"
                             maxLength={4}
                             value={newCard.cvv}
-                            onChange={(e) => setNewCard({ ...newCard, cvv: e.target.value.replace(/\D/g, '').slice(0, 4) })}
-                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono tracking-widest"
+                            onChange={(e) => {
+                              setCardModalError('');
+                              setNewCard({ ...newCard, cvv: e.target.value.replace(/\D/g, '').slice(0, 4) });
+                            }}
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono tracking-widest focus:ring-2 focus:ring-blue-500"
                             required
                           />
                         </div>
@@ -1031,7 +1105,10 @@ export default function UserProfileView({ user, onUpdateUser, onOpenAuth, onNavi
                       <div className="flex gap-2 pt-2">
                         <button
                           type="button"
-                          onClick={() => setShowAddCardModal(false)}
+                          onClick={() => {
+                            setCardModalError('');
+                            setShowAddCardModal(false);
+                          }}
                           className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
                         >
                           Cancel

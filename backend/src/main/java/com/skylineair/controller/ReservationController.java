@@ -29,9 +29,9 @@ public class ReservationController {
     private final HotelRepository hotelRepository;
 
     public ReservationController(ReservationRepository reservationRepository,
-                                 FlightRepository flightRepository,
-                                 HotelBookingRepository hotelBookingRepository,
-                                 HotelRepository hotelRepository) {
+            FlightRepository flightRepository,
+            HotelBookingRepository hotelBookingRepository,
+            HotelRepository hotelRepository) {
         this.reservationRepository = reservationRepository;
         this.flightRepository = flightRepository;
         this.hotelBookingRepository = hotelBookingRepository;
@@ -90,12 +90,13 @@ public class ReservationController {
 
     @GetMapping("/user/{userId}")
     public List<Reservation> getReservationsByUser(@PathVariable Long userId,
-                                                   @RequestParam(required = false) String email) {
+            @RequestParam(required = false) String email) {
         List<Reservation> list = reservationRepository.findByUserId(userId);
         if (email != null && !email.trim().isEmpty()) {
             List<Reservation> emailList = reservationRepository.findByUserEmail(email.trim());
             for (Reservation er : emailList) {
-                if (list.stream().noneMatch(r -> r.getReservationId() != null && r.getReservationId().equals(er.getReservationId()))) {
+                if (list.stream().noneMatch(
+                        r -> r.getReservationId() != null && r.getReservationId().equals(er.getReservationId()))) {
                     list.add(er);
                 }
             }
@@ -148,13 +149,11 @@ public class ReservationController {
         for (Reservation r : flightReservations) {
             // Cancelled or refunded bookings release their seats back to inventory
             String status = r.getBookingStatus();
-            if (status != null && (
-                    status.equalsIgnoreCase("CANCELLED") ||
+            if (status != null && (status.equalsIgnoreCase("CANCELLED") ||
                     status.equalsIgnoreCase("REFUNDED") ||
                     status.equalsIgnoreCase("REFUND_APPROVED") ||
                     status.equalsIgnoreCase("CANCELLED_AND_REFUNDED") ||
-                    status.equalsIgnoreCase("CANCEL")
-            )) {
+                    status.equalsIgnoreCase("CANCEL"))) {
                 continue;
             }
             if (excludePnr != null && excludePnr.equalsIgnoreCase(r.getPnrCode())) {
@@ -189,7 +188,8 @@ public class ReservationController {
             }
         }
 
-        // Validate intra-booking duplicate seats (prevent 2 passengers having same seat in same booking)
+        // Validate intra-booking duplicate seats (prevent 2 passengers having same seat
+        // in same booking)
         if (reservation.getPassengers() != null && reservation.getPassengers().size() > 1) {
             java.util.Set<String> seenInBooking = new java.util.HashSet<>();
             for (com.skylineair.model.Passenger p : reservation.getPassengers()) {
@@ -197,26 +197,28 @@ public class ReservationController {
                     String seatUpper = p.getSeatNumber().trim().toUpperCase();
                     if (!seenInBooking.add(seatUpper)) {
                         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
-                                "message", "Duplicate seat assignment: Multiple passengers in this booking cannot select the same seat (" + seatUpper + ")."
-                        ));
+                                "message",
+                                "Duplicate seat assignment: Multiple passengers in this booking cannot select the same seat ("
+                                        + seatUpper + ")."));
                     }
                 }
             }
         }
 
-        // Validate seat duplication against other active reservations on the same flight
-        if (reservation.getFlightNumber() != null && !reservation.getFlightNumber().trim().isEmpty() && reservation.getPassengers() != null) {
-            List<Reservation> existingFlightRes = reservationRepository.findByFlightNumber(reservation.getFlightNumber().trim());
+        // Validate seat duplication against other active reservations on the same
+        // flight
+        if (reservation.getFlightNumber() != null && !reservation.getFlightNumber().trim().isEmpty()
+                && reservation.getPassengers() != null) {
+            List<Reservation> existingFlightRes = reservationRepository
+                    .findByFlightNumber(reservation.getFlightNumber().trim());
             for (Reservation existing : existingFlightRes) {
                 // Cancelled or refunded tickets release their seats back to inventory
                 String status = existing.getBookingStatus();
-                if (status != null && (
-                        status.equalsIgnoreCase("CANCELLED") ||
+                if (status != null && (status.equalsIgnoreCase("CANCELLED") ||
                         status.equalsIgnoreCase("REFUNDED") ||
                         status.equalsIgnoreCase("REFUND_APPROVED") ||
                         status.equalsIgnoreCase("CANCELLED_AND_REFUNDED") ||
-                        status.equalsIgnoreCase("CANCEL")
-                )) {
+                        status.equalsIgnoreCase("CANCEL"))) {
                     continue;
                 }
                 if (existing.getPassengers() != null) {
@@ -224,11 +226,14 @@ public class ReservationController {
                         if (ep.getSeatNumber() != null && !ep.getSeatNumber().trim().isEmpty()) {
                             String existingSeat = ep.getSeatNumber().trim().toUpperCase();
                             for (com.skylineair.model.Passenger newP : reservation.getPassengers()) {
-                                if (newP.getSeatNumber() != null && existingSeat.equalsIgnoreCase(newP.getSeatNumber().trim())) {
+                                if (newP.getSeatNumber() != null
+                                        && existingSeat.equalsIgnoreCase(newP.getSeatNumber().trim())) {
                                     return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
-                                            "message", "Seat " + existingSeat + " is already occupied on flight " + reservation.getFlightNumber() + ". Seats cannot be re-assigned unless the previous ticket is cancelled and refunded.",
-                                            "occupiedSeat", existingSeat
-                                    ));
+                                            "message",
+                                            "Seat " + existingSeat + " is already occupied on flight "
+                                                    + reservation.getFlightNumber()
+                                                    + ". Seats cannot be re-assigned unless the previous ticket is cancelled and refunded.",
+                                            "occupiedSeat", existingSeat));
                                 }
                             }
                         }
@@ -244,7 +249,8 @@ public class ReservationController {
 
         if (isComplimentaryLayover) {
             reservation.setHotelPrice(BigDecimal.ZERO);
-            if (reservation.getHotelVoucherCode() == null || reservation.getHotelVoucherCode().isBlank() || !reservation.getHotelVoucherCode().startsWith("COMP-HTL")) {
+            if (reservation.getHotelVoucherCode() == null || reservation.getHotelVoucherCode().isBlank()
+                    || !reservation.getHotelVoucherCode().startsWith("COMP-HTL")) {
                 reservation.setHotelVoucherCode("COMP-HTL-" + (1000 + new Random().nextInt(9000)));
             }
         }
@@ -258,20 +264,24 @@ public class ReservationController {
 
         if (reservation.getFlightNumber() != null && !reservation.getFlightNumber().trim().isEmpty()) {
             flightRepository.findByFlightNumber(reservation.getFlightNumber().trim()).ifPresent(flight -> {
-                int currentAvailable = flight.getAvailableSeats() != null ? flight.getAvailableSeats() : (flight.getTotalSeats() != null ? flight.getTotalSeats() : 60);
+                int currentAvailable = flight.getAvailableSeats() != null ? flight.getAvailableSeats()
+                        : (flight.getTotalSeats() != null ? flight.getTotalSeats() : 60);
                 flight.setAvailableSeats(Math.max(0, currentAvailable - bookedPassengerCount));
                 flightRepository.save(flight);
             });
         } else if (reservation.getFlightId() != null) {
             flightRepository.findById(reservation.getFlightId()).ifPresent(flight -> {
-                int currentAvailable = flight.getAvailableSeats() != null ? flight.getAvailableSeats() : (flight.getTotalSeats() != null ? flight.getTotalSeats() : 60);
+                int currentAvailable = flight.getAvailableSeats() != null ? flight.getAvailableSeats()
+                        : (flight.getTotalSeats() != null ? flight.getTotalSeats() : 60);
                 flight.setAvailableSeats(Math.max(0, currentAvailable - bookedPassengerCount));
                 flightRepository.save(flight);
             });
         }
 
-        // Auto-create HotelBooking record in database if hotel was chosen during booking
-        if (Boolean.TRUE.equals(saved.getHotelBooked()) || saved.getHotelId() != null || (saved.getHotelName() != null && !saved.getHotelName().trim().isEmpty())) {
+        // Auto-create HotelBooking record in database if hotel was chosen during
+        // booking
+        if (Boolean.TRUE.equals(saved.getHotelBooked()) || saved.getHotelId() != null
+                || (saved.getHotelName() != null && !saved.getHotelName().trim().isEmpty())) {
             try {
                 List<HotelBooking> existingHb = hotelBookingRepository.findByPnrCode(saved.getPnrCode());
                 if (existingHb.isEmpty()) {
@@ -285,7 +295,8 @@ public class ReservationController {
                     if (saved.getPassengers() != null && !saved.getPassengers().isEmpty()) {
                         Passenger p0 = saved.getPassengers().get(0);
                         if (p0.getFirstName() != null && !p0.getFirstName().trim().isEmpty()) {
-                            passName = (p0.getFirstName() + " " + (p0.getLastName() != null ? p0.getLastName() : "")).trim();
+                            passName = (p0.getFirstName() + " " + (p0.getLastName() != null ? p0.getLastName() : ""))
+                                    .trim();
                         }
                     }
                     hb.setPassengerName(passName != null && !passName.isBlank() ? passName : "Passenger");
@@ -294,18 +305,23 @@ public class ReservationController {
                     hb.setHotelName(saved.getHotelName());
 
                     if (hb.getHotelId() == null && hb.getHotelName() != null && !hb.getHotelName().isBlank()) {
-                        hotelRepository.findByNameIgnoreCase(hb.getHotelName().trim()).ifPresent(h -> hb.setHotelId(h.getHotelId()));
+                        hotelRepository.findByNameIgnoreCase(hb.getHotelName().trim())
+                                .ifPresent(h -> hb.setHotelId(h.getHotelId()));
                     }
                     if (hb.getHotelId() == null) {
                         hotelRepository.findAll().stream().findFirst().ifPresent(h -> {
                             hb.setHotelId(h.getHotelId());
-                            if (hb.getHotelName() == null) hb.setHotelName(h.getName());
+                            if (hb.getHotelName() == null)
+                                hb.setHotelName(h.getName());
                         });
                     }
 
-                    hb.setRoomType(saved.getHotelRoomType() != null && !saved.getHotelRoomType().isBlank() ? saved.getHotelRoomType() : "Deluxe Transit Suite");
+                    hb.setRoomType(saved.getHotelRoomType() != null && !saved.getHotelRoomType().isBlank()
+                            ? saved.getHotelRoomType()
+                            : "Deluxe Transit Suite");
                     hb.setIsComplimentary(isComplimentaryLayover);
-                    hb.setAmount(isComplimentaryLayover ? BigDecimal.ZERO : (saved.getHotelPrice() != null ? saved.getHotelPrice() : BigDecimal.ZERO));
+                    hb.setAmount(isComplimentaryLayover ? BigDecimal.ZERO
+                            : (saved.getHotelPrice() != null ? saved.getHotelPrice() : BigDecimal.ZERO));
 
                     String vCode = saved.getHotelVoucherCode();
                     if (vCode == null || vCode.isBlank()) {
@@ -323,11 +339,13 @@ public class ReservationController {
                         if (saved.getDepartureTime() != null && !saved.getDepartureTime().trim().isEmpty()) {
                             try {
                                 checkIn = LocalDate.parse(saved.getDepartureTime().split("T")[0]);
-                            } catch (Exception ignored) {}
+                            } catch (Exception ignored) {
+                            }
                         }
                     }
 
-                    int nights = (saved.getHotelNights() != null && saved.getHotelNights() > 0) ? saved.getHotelNights() : 1;
+                    int nights = (saved.getHotelNights() != null && saved.getHotelNights() > 0) ? saved.getHotelNights()
+                            : 1;
                     LocalDate checkOut = saved.getHotelCheckOutDate();
                     if (checkOut == null) {
                         checkOut = checkIn.plusDays(nights);
@@ -410,7 +428,8 @@ public class ReservationController {
             if (body.containsKey("totalAmount")) {
                 try {
                     existing.setTotalAmount(new java.math.BigDecimal(String.valueOf(body.get("totalAmount"))));
-                } catch (Exception ignored) {}
+                } catch (Exception ignored) {
+                }
             }
             if (body.containsKey("passengers") && body.get("passengers") instanceof List) {
                 @SuppressWarnings("unchecked")
@@ -419,21 +438,33 @@ public class ReservationController {
                     for (int i = 0; i < Math.min(existing.getPassengers().size(), pList.size()); i++) {
                         com.skylineair.model.Passenger p = existing.getPassengers().get(i);
                         Map<String, Object> pMap = pList.get(i);
-                        if (pMap.containsKey("title")) p.setTitle((String) pMap.get("title"));
-                        if (pMap.containsKey("firstName")) p.setFirstName((String) pMap.get("firstName"));
-                        if (pMap.containsKey("lastName")) p.setLastName((String) pMap.get("lastName"));
-                        if (pMap.containsKey("dob")) p.setDob((String) pMap.get("dob"));
-                        if (pMap.containsKey("seatNumber")) p.setSeatNumber((String) pMap.get("seatNumber"));
-                        if (pMap.containsKey("seat")) p.setSeatNumber((String) pMap.get("seat"));
-                        if (pMap.containsKey("passportNumber")) p.setPassportNumber((String) pMap.get("passportNumber"));
-                        if (pMap.containsKey("passport")) p.setPassportNumber((String) pMap.get("passport"));
-                        if (pMap.containsKey("nationality")) p.setNationality((String) pMap.get("nationality"));
-                        if (pMap.containsKey("mealPreference")) p.setMealPreference((String) pMap.get("mealPreference"));
-                        if (pMap.containsKey("meal")) p.setMealPreference((String) pMap.get("meal"));
+                        if (pMap.containsKey("title"))
+                            p.setTitle((String) pMap.get("title"));
+                        if (pMap.containsKey("firstName"))
+                            p.setFirstName((String) pMap.get("firstName"));
+                        if (pMap.containsKey("lastName"))
+                            p.setLastName((String) pMap.get("lastName"));
+                        if (pMap.containsKey("dob"))
+                            p.setDob((String) pMap.get("dob"));
+                        if (pMap.containsKey("seatNumber"))
+                            p.setSeatNumber((String) pMap.get("seatNumber"));
+                        if (pMap.containsKey("seat"))
+                            p.setSeatNumber((String) pMap.get("seat"));
+                        if (pMap.containsKey("passportNumber"))
+                            p.setPassportNumber((String) pMap.get("passportNumber"));
+                        if (pMap.containsKey("passport"))
+                            p.setPassportNumber((String) pMap.get("passport"));
+                        if (pMap.containsKey("nationality"))
+                            p.setNationality((String) pMap.get("nationality"));
+                        if (pMap.containsKey("mealPreference"))
+                            p.setMealPreference((String) pMap.get("mealPreference"));
+                        if (pMap.containsKey("meal"))
+                            p.setMealPreference((String) pMap.get("meal"));
                         if (pMap.containsKey("extraBaggageKg")) {
                             try {
                                 p.setExtraBaggageKg(Integer.parseInt(String.valueOf(pMap.get("extraBaggageKg"))));
-                            } catch (Exception ignored) {}
+                            } catch (Exception ignored) {
+                            }
                         }
                     }
                 }
@@ -488,7 +519,8 @@ public class ReservationController {
             if (body.containsKey("totalAmount")) {
                 try {
                     existing.setTotalAmount(new java.math.BigDecimal(String.valueOf(body.get("totalAmount"))));
-                } catch (Exception ignored) {}
+                } catch (Exception ignored) {
+                }
             }
             if (body.containsKey("passengers") && body.get("passengers") instanceof List) {
                 @SuppressWarnings("unchecked")
@@ -497,21 +529,33 @@ public class ReservationController {
                     for (int i = 0; i < Math.min(existing.getPassengers().size(), pList.size()); i++) {
                         com.skylineair.model.Passenger p = existing.getPassengers().get(i);
                         Map<String, Object> pMap = pList.get(i);
-                        if (pMap.containsKey("title")) p.setTitle((String) pMap.get("title"));
-                        if (pMap.containsKey("firstName")) p.setFirstName((String) pMap.get("firstName"));
-                        if (pMap.containsKey("lastName")) p.setLastName((String) pMap.get("lastName"));
-                        if (pMap.containsKey("dob")) p.setDob((String) pMap.get("dob"));
-                        if (pMap.containsKey("seatNumber")) p.setSeatNumber((String) pMap.get("seatNumber"));
-                        if (pMap.containsKey("seat")) p.setSeatNumber((String) pMap.get("seat"));
-                        if (pMap.containsKey("passportNumber")) p.setPassportNumber((String) pMap.get("passportNumber"));
-                        if (pMap.containsKey("passport")) p.setPassportNumber((String) pMap.get("passport"));
-                        if (pMap.containsKey("nationality")) p.setNationality((String) pMap.get("nationality"));
-                        if (pMap.containsKey("mealPreference")) p.setMealPreference((String) pMap.get("mealPreference"));
-                        if (pMap.containsKey("meal")) p.setMealPreference((String) pMap.get("meal"));
+                        if (pMap.containsKey("title"))
+                            p.setTitle((String) pMap.get("title"));
+                        if (pMap.containsKey("firstName"))
+                            p.setFirstName((String) pMap.get("firstName"));
+                        if (pMap.containsKey("lastName"))
+                            p.setLastName((String) pMap.get("lastName"));
+                        if (pMap.containsKey("dob"))
+                            p.setDob((String) pMap.get("dob"));
+                        if (pMap.containsKey("seatNumber"))
+                            p.setSeatNumber((String) pMap.get("seatNumber"));
+                        if (pMap.containsKey("seat"))
+                            p.setSeatNumber((String) pMap.get("seat"));
+                        if (pMap.containsKey("passportNumber"))
+                            p.setPassportNumber((String) pMap.get("passportNumber"));
+                        if (pMap.containsKey("passport"))
+                            p.setPassportNumber((String) pMap.get("passport"));
+                        if (pMap.containsKey("nationality"))
+                            p.setNationality((String) pMap.get("nationality"));
+                        if (pMap.containsKey("mealPreference"))
+                            p.setMealPreference((String) pMap.get("mealPreference"));
+                        if (pMap.containsKey("meal"))
+                            p.setMealPreference((String) pMap.get("meal"));
                         if (pMap.containsKey("extraBaggageKg")) {
                             try {
                                 p.setExtraBaggageKg(Integer.parseInt(String.valueOf(pMap.get("extraBaggageKg"))));
-                            } catch (Exception ignored) {}
+                            } catch (Exception ignored) {
+                            }
                         }
                     }
                 }
