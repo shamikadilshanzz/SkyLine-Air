@@ -1,18 +1,8 @@
--- ============================================================================
--- SLIIT IT2140: Database Design and Development (Assignment 01 - Part 02)
--- Project: SkyLine Air - Airline Ticket Reservation System
--- Target DBMS: Microsoft SQL Server (SSMS / T-SQL Dialect)
--- ============================================================================
-
--- Create and Use Database (Optional - uncomment if creating a new database)
 CREATE DATABASE SkyLineAirDB;
 GO
 USE SkyLineAirDB;
 GO
 
--- ----------------------------------------------------------------------------
--- Drop Child and Parent Tables in Reverse Dependency Order
--- ----------------------------------------------------------------------------
 IF OBJECT_ID('dbo.price_alerts', 'U') IS NOT NULL DROP TABLE dbo.price_alerts;
 IF OBJECT_ID('dbo.hotel_bookings', 'U') IS NOT NULL DROP TABLE dbo.hotel_bookings;
 IF OBJECT_ID('dbo.refund_requests', 'U') IS NOT NULL DROP TABLE dbo.refund_requests;
@@ -26,9 +16,6 @@ IF OBJECT_ID('dbo.users', 'U') IS NOT NULL DROP TABLE dbo.users;
 IF OBJECT_ID('dbo.aircraft', 'U') IS NOT NULL DROP TABLE dbo.aircraft;
 IF OBJECT_ID('dbo.airports', 'U') IS NOT NULL DROP TABLE dbo.airports;
 GO
-
--- ============================================================================
--- 1. Airports Table (Master Lookup - 4 attributes)
 -- ============================================================================
 CREATE TABLE dbo.airports (
     airport_code VARCHAR(3) NOT NULL,
@@ -39,8 +26,6 @@ CREATE TABLE dbo.airports (
 );
 GO
 
--- ============================================================================
--- 2. Aircraft Fleet Table (Master Fleet - 7 attributes)
 -- ============================================================================
 CREATE TABLE dbo.aircraft (
     aircraft_id INT IDENTITY(1,1) NOT NULL,
@@ -74,7 +59,7 @@ CREATE TABLE dbo.users (
     address VARCHAR(255) NULL,
     city VARCHAR(50) NULL,
     postal_code VARCHAR(20) NULL,
-    role VARCHAR(30) NOT NULL DEFAULT 'PASSENGER', -- Discriminator column
+    role VARCHAR(30) NOT NULL DEFAULT 'PASSENGER', 
     passport_number VARCHAR(30) NULL,
     passport_expiry VARCHAR(30) NULL,
     passport_issuing_country VARCHAR(50) NULL,
@@ -94,14 +79,11 @@ CREATE TABLE dbo.users (
 );
 GO
 
--- Filtered Unique Index in SQL Server (Allows multiple NULLs while enforcing uniqueness on non-NULL values)
 CREATE UNIQUE NONCLUSTERED INDEX uq_users_ffn 
 ON dbo.users (frequent_flyer_number) 
 WHERE frequent_flyer_number IS NOT NULL;
 GO
 
--- ============================================================================
--- 4. Saved Payment Cards Table (10 attributes)
 -- ============================================================================
 CREATE TABLE dbo.user_cards (
     card_id INT IDENTITY(1,1) NOT NULL,
@@ -120,8 +102,6 @@ CREATE TABLE dbo.user_cards (
 );
 GO
 
--- ============================================================================
--- 5. Flight Schedules Table (24 attributes)
 -- ============================================================================
 CREATE TABLE dbo.flights (
     flight_id INT IDENTITY(1,1) NOT NULL,
@@ -160,8 +140,6 @@ CREATE TABLE dbo.flights (
 GO
 
 -- ============================================================================
--- 6. Hotel Partners Table (12 attributes)
--- ============================================================================
 CREATE TABLE dbo.hotels (
     hotel_id INT IDENTITY(1,1) NOT NULL,
     name VARCHAR(100) NOT NULL,
@@ -183,8 +161,6 @@ CREATE TABLE dbo.hotels (
 );
 GO
 
--- ============================================================================
--- 7. Reservations & Bookings Table (29 attributes)
 -- ============================================================================
 CREATE TABLE dbo.reservations (
     reservation_id INT IDENTITY(1,1) NOT NULL,
@@ -228,11 +204,6 @@ CREATE TABLE dbo.reservations (
 GO
 
 -- ============================================================================
--- 8. Passenger Details Table (Weak Entity - 12 attributes)
--- Identifying Relationship: reservations -> passengers
--- Partial Key: passenger_id
--- Composite Primary Key: (reservation_id, passenger_id)
--- ============================================================================
 CREATE TABLE dbo.passengers (
     reservation_id INT NOT NULL,
     passenger_id INT NOT NULL,
@@ -253,8 +224,6 @@ CREATE TABLE dbo.passengers (
 GO
 
 -- ============================================================================
--- 9. Payment Transactions Table (7 attributes)
--- ============================================================================
 CREATE TABLE dbo.payments (
     payment_id INT IDENTITY(1,1) NOT NULL,
     reservation_id INT NOT NULL,
@@ -270,8 +239,6 @@ CREATE TABLE dbo.payments (
 );
 GO
 
--- ============================================================================
--- 10. Ticket Cancellations & Refunds Table (14 attributes)
 -- ============================================================================
 CREATE TABLE dbo.refund_requests (
     refund_id INT IDENTITY(1,1) NOT NULL,
@@ -295,8 +262,6 @@ CREATE TABLE dbo.refund_requests (
 );
 GO
 
--- ============================================================================
--- 11. Hotel Bookings Table (16 attributes)
 -- ============================================================================
 CREATE TABLE dbo.hotel_bookings (
     hotel_booking_id INT IDENTITY(1,1) NOT NULL,
@@ -325,8 +290,6 @@ CREATE TABLE dbo.hotel_bookings (
 );
 GO
 
--- ============================================================================
--- 12. Flight Price Alerts & Saved Searches Table (12 attributes)
 -- ============================================================================
 CREATE TABLE dbo.price_alerts (
     alert_id INT IDENTITY(1,1) NOT NULL,

@@ -58,12 +58,12 @@ const HERO_SLIDES = [
 const SLIDE_MS = 6500;
 
 /* A labelled field box: label sits inside the box so it works on any width */
-function Field({ label, icon: Icon, chevron = false, children }) {
+function Field({ label, icon: Icon, chevron = false, error = false, children }) {
   return (
-    <label className="relative block min-w-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 pb-2.5 pt-2 transition focus-within:border-blue-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-blue-500/10">
-      <span className="block text-xs font-semibold text-slate-500">{label}</span>
+    <label className={`relative block min-w-0 rounded-2xl border ${error ? 'border-red-400 bg-red-50/40 ring-2 ring-red-400/20' : 'border-slate-200 bg-slate-50'} px-4 pb-2.5 pt-2 transition focus-within:border-blue-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-blue-500/10`}>
+      <span className={`block text-xs font-semibold ${error ? 'text-red-600' : 'text-slate-500'}`}>{label}</span>
       <span className="mt-0.5 flex items-center gap-2">
-        <Icon className="h-4 w-4 shrink-0 text-blue-600" />
+        <Icon className={`h-4 w-4 shrink-0 ${error ? 'text-red-500' : 'text-blue-600'}`} />
         {children}
         {chevron && <ChevronDown className="pointer-events-none h-4 w-4 shrink-0 text-slate-400" />}
       </span>
@@ -94,6 +94,19 @@ export default function FlightSearchSection({ onExecuteSearch }) {
   const [cabinClass, setCabinClass] = useState('ECONOMY');
   const [validationError, setValidationError] = useState('');
 
+  // Live date validation states
+  const isPastDepart = Boolean(departDate && departDate < getFormattedDate(0));
+  const isReturnBeforeDepart = Boolean(tripType === 'roundtrip' && departDate && returnDate && departDate > returnDate);
+  const isDateInvalid = isPastDepart || isReturnBeforeDepart;
+
+  const activeError = validationError || (
+    isPastDepart
+      ? 'Departure date cannot be in the past.'
+      : isReturnBeforeDepart
+      ? 'Return date must be after departure date.'
+      : ''
+  );
+
   // Hero slideshow state. `prev` keeps the outgoing photo animating while it fades out.
   const [slide, setSlide] = useState({ active: 0, prev: null });
   const [failed, setFailed] = useState({});
@@ -119,8 +132,24 @@ export default function FlightSearchSection({ onExecuteSearch }) {
     }
   };
 
+  const handleDepartDateChange = (val) => {
+    setDepartDate(val);
+    setValidationError('');
+  };
+
+  const handleReturnDateChange = (val) => {
+    setReturnDate(val);
+    setValidationError('');
+  };
+
+  const handleTripTypeChange = (type) => {
+    setTripType(type);
+    setValidationError('');
+  };
+
   const handleSearchSubmit = (e) => {
     e.preventDefault();
+    if (isDateInvalid) return;
     setValidationError('');
 
     if (!origin || !destination) {
@@ -135,9 +164,15 @@ export default function FlightSearchSection({ onExecuteSearch }) {
       setValidationError('Please choose a departure date.');
       return;
     }
-    if (tripType === 'roundtrip' && returnDate && new Date(returnDate) < new Date(departDate)) {
-      setValidationError('Return date must be after departure date.');
-      return;
+    if (tripType === 'roundtrip') {
+      if (!returnDate) {
+        setValidationError('Please choose a return date.');
+        return;
+      }
+      if (departDate > returnDate) {
+        setValidationError('Return date must be after departure date.');
+        return;
+      }
     }
 
     onExecuteSearch({ tripType, origin, destination, departDate, returnDate, passengers, cabinClass });
@@ -332,7 +367,7 @@ export default function FlightSearchSection({ onExecuteSearch }) {
                   type="button"
                   role="tab"
                   aria-selected={tripType === t.id}
-                  onClick={() => setTripType(t.id)}
+                  onClick={() => handleTripTypeChange(t.id)}
                   className={`rounded-xl px-3 py-2.5 transition-all sm:px-5 ${tripType === t.id
                       ? 'bg-gradient-to-b from-blue-500 to-blue-600 text-white shadow-md shadow-blue-600/25'
                       : 'text-slate-600 hover:text-slate-900'
@@ -376,10 +411,10 @@ export default function FlightSearchSection({ onExecuteSearch }) {
           </div>
 
           {/* Validation */}
-          {validationError && (
+          {activeError && (
             <div role="alert" className="mt-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
               <AlertCircle className="mt-px h-4 w-4 shrink-0 text-red-600" />
-              <span className="font-semibold">{validationError}</span>
+              <span className="font-semibold">{activeError}</span>
             </div>
           )}
 
@@ -420,33 +455,28 @@ export default function FlightSearchSection({ onExecuteSearch }) {
 
             {/* Dates */}
             <div className={`grid gap-3 xl:flex-[1.2] ${tripType === 'roundtrip' ? 'grid-cols-2' : 'grid-cols-1'}`}>
-              <Field label="Depart" icon={CalendarIcon}>
+              <Field
+                label="Depart"
+                icon={CalendarIcon}
+                error={isPastDepart || isReturnBeforeDepart}
+              >
                 <input
                   type="date"
-                  min={getFormattedDate(0)}
                   value={departDate}
-                  onChange={(e) => {
-                    const newDepart = e.target.value;
-                    setDepartDate(newDepart);
-                    if (returnDate && newDepart && new Date(returnDate) < new Date(newDepart)) {
-                      const d = new Date(newDepart);
-                      d.setDate(d.getDate() + 7);
-                      const yr = d.getFullYear();
-                      const mo = String(d.getMonth() + 1).padStart(2, '0');
-                      const da = String(d.getDate()).padStart(2, '0');
-                      setReturnDate(`${yr}-${mo}-${da}`);
-                    }
-                  }}
+                  onChange={(e) => handleDepartDateChange(e.target.value)}
                   className={fieldInput}
                 />
               </Field>
               {tripType === 'roundtrip' && (
-                <Field label="Return" icon={CalendarIcon}>
+                <Field
+                  label="Return"
+                  icon={CalendarIcon}
+                  error={isReturnBeforeDepart}
+                >
                   <input
                     type="date"
-                    min={departDate || getFormattedDate(0)}
                     value={returnDate}
-                    onChange={(e) => setReturnDate(e.target.value)}
+                    onChange={(e) => handleReturnDateChange(e.target.value)}
                     className={fieldInput}
                   />
                 </Field>
@@ -456,7 +486,13 @@ export default function FlightSearchSection({ onExecuteSearch }) {
             {/* Submit */}
             <button
               type="submit"
-              className="inline-flex h-14 items-center justify-center gap-2 whitespace-nowrap rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 px-6 text-sm font-extrabold text-white shadow-xl shadow-blue-600/30 transition hover:from-blue-700 hover:to-indigo-800 active:scale-[0.98] focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-500/30 xl:h-auto xl:min-w-[180px]"
+              disabled={isDateInvalid}
+              title={isDateInvalid ? activeError : 'Search flights'}
+              className={`inline-flex h-14 items-center justify-center gap-2 whitespace-nowrap rounded-2xl px-6 text-sm font-extrabold text-white shadow-xl transition focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-500/30 xl:h-auto xl:min-w-[180px] ${
+                isDateInvalid
+                  ? 'cursor-not-allowed bg-slate-400 opacity-60 shadow-none'
+                  : 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 shadow-blue-600/30 hover:from-blue-700 hover:to-indigo-800 active:scale-[0.98]'
+              }`}
             >
               <Search className="h-4 w-4 shrink-0" strokeWidth={2.5} />
               Search flights

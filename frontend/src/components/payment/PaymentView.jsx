@@ -307,21 +307,30 @@ export default function PaymentView({
     setCardValidationError('');
 
     if (paymentMethod === 'CARD') {
-      if (!cardName || cardName.trim().length < 3) {
-        setCardValidationError('Please enter a valid Cardholder Full Name (at least 3 characters).');
+      if (!cardName || cardName.trim().length < 2) {
+        setCardValidationError('Please enter a valid Cardholder Full Name (at least 2 characters).');
         return;
       }
 
       const digitsOnly = cardNumber.replace(/\D/g, '');
       const isMaskedSaved = cardNumber.includes('••••') && digitsOnly.length >= 4;
-      if (!isMaskedSaved && digitsOnly.length < 13) {
-        setCardValidationError('Please enter a valid Credit or Debit Card Number (13 to 19 digits).');
+      if (!isMaskedSaved && digitsOnly.length !== 16) {
+        setCardValidationError(`Card number must be exactly 16 digits (currently ${digitsOnly.length} digits).`);
         return;
       }
 
       const expiryRegex = /^(0[1-9]|1[0-2])\/?([0-9]{2})$/;
-      if (!expiryRegex.test(expiry.trim())) {
-        setCardValidationError('Please enter a valid Expiry Date in MM/YY format (e.g. 12/28).');
+      const expiryMatch = expiry.trim().match(expiryRegex);
+      if (!expiryMatch) {
+        setCardValidationError('Please enter a valid Expiry Date in MM/YY format (e.g. 08/28 with month 01-12).');
+        return;
+      }
+
+      const expMonth = parseInt(expiryMatch[1], 10);
+      const expYear = parseInt('20' + expiryMatch[2], 10);
+      const now = new Date();
+      if (expYear < now.getFullYear() || (expYear === now.getFullYear() && expMonth < now.getMonth() + 1)) {
+        setCardValidationError('This card has already expired. Please enter a valid future expiry date.');
         return;
       }
 
@@ -777,41 +786,72 @@ export default function PaymentView({
                   <input
                     type="text"
                     value={cardName}
-                    onChange={(e) => setCardName(e.target.value)}
+                    placeholder="e.g. Alex Morgan"
+                    onChange={(e) => {
+                      setCardValidationError('');
+                      setCardName(e.target.value);
+                    }}
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-bold text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Card Number</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                    <span>Card Number (16 Digits)</span>
+                    <span className="text-[10px] text-slate-400 font-normal">16 digits required</span>
+                  </label>
                   <input
                     type="text"
                     value={cardNumber}
-                    onChange={(e) => setCardNumber(e.target.value)}
+                    maxLength={19}
+                    placeholder="4532 8901 2345 6789"
+                    onChange={(e) => {
+                      setCardValidationError('');
+                      const digits = e.target.value.replace(/\D/g, '').slice(0, 16);
+                      const formatted = digits.match(/.{1,4}/g)?.join(' ') || digits;
+                      setCardNumber(formatted);
+                    }}
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 font-mono text-xs font-bold text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
-                    placeholder="4532 •••• •••• 8892"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Expiry Date</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                      <span>Expiry Date</span>
+                      <span className="text-[10px] text-slate-400 font-normal">MM/YY</span>
+                    </label>
                     <input
                       type="text"
                       value={expiry}
-                      onChange={(e) => setExpiry(e.target.value)}
+                      maxLength={5}
+                      placeholder="12/28"
+                      onChange={(e) => {
+                        setCardValidationError('');
+                        let val = e.target.value.replace(/[^\d]/g, '').slice(0, 4);
+                        if (val.length >= 3) {
+                          val = val.slice(0, 2) + '/' + val.slice(2);
+                        }
+                        setExpiry(val);
+                      }}
                       className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 font-mono text-xs font-bold text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
-                      placeholder="MM/YY"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">CVV Security Code</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                      <span>CVV / CVC</span>
+                      <span className="text-[10px] text-slate-400 font-normal">3-4 digits</span>
+                    </label>
                     <input
                       type="password"
                       value={cvv}
-                      onChange={(e) => setCvv(e.target.value)}
+                      maxLength={4}
+                      placeholder="•••"
+                      onChange={(e) => {
+                        setCardValidationError('');
+                        setCvv(e.target.value.replace(/\D/g, '').slice(0, 4));
+                      }}
                       className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 font-mono text-xs font-bold text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
-                      placeholder="382"
                     />
                   </div>
                 </div>
