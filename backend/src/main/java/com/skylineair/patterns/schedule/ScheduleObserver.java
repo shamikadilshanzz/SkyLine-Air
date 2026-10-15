@@ -10,5 +10,9 @@ import com.skylineair.model.Flight;
  * Defines the update contract when flight schedules change.
  */
 public interface ScheduleObserver {
-    void onScheduleUpdated(Flight flight, String changeType, String changeDetails);
+    void onScheduleUpdated(
+            Flight flight,
+            String changeType,
+            String changeDetails
+    );
 }
